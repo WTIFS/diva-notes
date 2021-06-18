@@ -23,8 +23,8 @@ type Context interface {
 // A canceler is a context type that can be canceled directly. The
 // implementations are *cancelCtx and *timerCtx.
 type canceler interface {
-	  cancel(removeFromParent bool, err error)
-	  Done() <-chan struct{}
+      cancel(removeFromParent bool, err error)
+      Done() <-chan struct{}
 }
 ```
 
@@ -76,24 +76,24 @@ type valueCtx struct {
 var closedchan = make(chan struct{})
 
 func init() {
-	close(closedchan)
+    close(closedchan)
 }
 
 // 其实主要就做了一件事：把 c.done 这个 channel 关闭掉，这样所有监听 <- c.Done() 的协程都会收到通知
 func (c *cancelCtx) cancel(removeFromParent bool, err error) {
-	c.mu.Lock() // 加锁
-	c.err = err // 设置取消原因
-	if c.done == nil {
-		c.done = closedchan
-	} else {
-		close(c.done)
-	}
-	for child := range c.children { // 将子节点依次取消
-		// NOTE: acquiring the child's lock while holding parent's lock.
-		child.cancel(false, err)
-	}
-	c.children = nil
-	c.mu.Unlock()
+    c.mu.Lock() // 加锁
+    c.err = err // 设置取消原因
+    if c.done == nil {
+        c.done = closedchan
+    } else {
+        close(c.done)
+    }
+    for child := range c.children { // 将子节点依次取消
+        // NOTE: acquiring the child's lock while holding parent's lock.
+        child.cancel(false, err)
+    }
+    c.children = nil
+    c.mu.Unlock()
 }
 ```
 
@@ -102,9 +102,9 @@ func (c *cancelCtx) cancel(removeFromParent bool, err error) {
 ```go
 // 新建一个cancel context
 func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
-	c := newCancelCtx(parent)
-	propagateCancel(parent, &c) // 将新建的c加到其父节点的child列表里
-	return &c, func() { c.cancel(true, Canceled) }
+    c := newCancelCtx(parent)
+    propagateCancel(parent, &c) // 将新建的c加到其父节点的child列表里
+    return &c, func() { c.cancel(true, Canceled) }
 }
 
 func propagateCancel(parent Context, child canceler) {
@@ -134,19 +134,19 @@ var cancelCtxKey int
 
 // 找到parent(含)最近的可取消祖先节点
 func parentCancelCtx(parent Context) (*cancelCtx, bool) {
-	p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
-	if !ok {
-		return nil, false
-	}
-	return p, true
+    p, ok := parent.Value(&cancelCtxKey).(*cancelCtx)
+    if !ok {
+        return nil, false
+    }
+    return p, true
 }
 
 // 根据key查找value，如果找不到则递归从父节点向上找
 func (c *cancelCtx) Value(key interface{}) interface{} {
-	if key == &cancelCtxKey {
-		return c
-	}
-	return c.Context.Value(key) // 递归向上找
+    if key == &cancelCtxKey {
+        return c
+    }
+    return c.Context.Value(key) // 递归向上找
 }
 ```
 
@@ -162,24 +162,24 @@ func (c *cancelCtx) Value(key interface{}) interface{} {
 
 ```go
 func WithTimeout(parent Context, timeout time.Duration) (Context, CancelFunc) {
-	return WithDeadline(parent, time.Now().Add(timeout))
+    return WithDeadline(parent, time.Now().Add(timeout))
 }
 
 func WithDeadline(parent Context, d time.Time) (Context, CancelFunc) {
-	c := &timerCtx{
-		cancelCtx: newCancelCtx(parent),
-		deadline:  d,
-	}
-	propagateCancel(parent, c)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.err == nil {
+    c := &timerCtx{
+        cancelCtx: newCancelCtx(parent),
+        deadline:  d,
+    }
+    propagateCancel(parent, c)
+    c.mu.Lock()
+    defer c.mu.Unlock()
+    if c.err == nil {
         // 这里设了定时器，到期执行c.cancel方法
-		c.timer = time.AfterFunc(dur, func() {
-			c.cancel(true, DeadlineExceeded)
-		})
-	}
-	return c, func() { c.cancel(true, Canceled) }
+        c.timer = time.AfterFunc(dur, func() {
+            c.cancel(true, DeadlineExceeded)
+        })
+    }
+    return c, func() { c.cancel(true, Canceled) }
 }
 ```
 
@@ -210,8 +210,8 @@ func (c *conn) serve(ctx context.Context) {
     ctx = context.WithValue(ctx, LocalAddrContextKey, c.rwc.LocalAddr()) // 本地地址
   
     ctx, cancelCtx := context.WithCancel(ctx)
-  	c.cancelCtx = cancelCtx
-	  defer cancelCtx()
+    c.cancelCtx = cancelCtx
+      defer cancelCtx()
   
     for {
         w, err := c.readRequest(ctx)
