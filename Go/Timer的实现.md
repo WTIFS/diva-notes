@@ -44,6 +44,7 @@ func NewTimer(d Duration) *Timer {
 ```go
 // runtime/time.go
 // startTimer adds t to the timer heap. -> timer 实际上是用的大根堆，每个P一个这样的堆
+// 通过link做方法映射，time/sleep.go里调用的time.startTimer其实是runtime包里的。
 //go:linkname startTimer time.startTimer
 func startTimer(t *timer) {
     addtimer(t)
@@ -62,7 +63,7 @@ func addInitializedTimer(t *timer) {
     lock(&pp.timersLock)
     ok := cleantimers(pp) && doaddtimer(pp, t) // 清理P中的timer，并将当前timer加入P
     unlock(&pp.timersLock)
-    wakeNetPoller(when)
+    wakeNetPoller(when) // 根据时间就近来唤醒netpoll
 }
 
 ```
