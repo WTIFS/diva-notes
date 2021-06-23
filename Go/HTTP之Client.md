@@ -106,17 +106,14 @@ func (t *Transport) dialConn(ctx context.Context, cm connectMethod) (pconn *pers
 
 
 
-# 为什么不执行 close 会泄漏
+# 为什么不执行 resp.Body.Close 会内存泄漏
 
 回到上面启动的读 `pconn.readLoop()` 代码里
 
 ```go
 func (pc *persistConn) readLoop() {
-  
-  
     alive := true
     for alive {
-      
         waitForBodyRead := make(chan bool, 2)
         body := &bodyEOFSignal{
             body: resp.Body,

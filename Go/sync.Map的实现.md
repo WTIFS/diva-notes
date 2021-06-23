@@ -8,9 +8,8 @@
 
 ## 数据结构
 
-在 src/sync/map.go 中
-
 ```go
+// src/sync/map.go
 type Map struct {
     // 当涉及到脏数据(dirty)操作时候，需要使用这个锁
     mu Mutex
@@ -30,7 +29,10 @@ type Map struct {
 }
 ```
 
+
+
 **read的数据结构 readOnly：**
+
 ```go
 // readOnly is an immutable struct stored atomically in the Map.read field.
 type readOnly struct {
@@ -43,7 +45,10 @@ type readOnly struct {
 }
 ```
 
+
+
 **entry**
+
 ```go
 type entry struct {
     p unsafe.Pointer // *interface{}
