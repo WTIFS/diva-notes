@@ -269,7 +269,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout
 4. `epoll`  方法对 `select` 的一些缺点进行了优化，如：
    1. 用户调用时不再需要复制一份 `fd` 列表给内核，而是通过 `epoll_ctl` 方法直接向内核中写入 `fd`
    2. 内核仅会将就绪的 `fd` 返回给用户，不再需要用户自行遍历 `fd` 列表
-   3. 内核不再通过轮询的方式找到就绪的 `fd` ，而是通过异步唤醒机制
+   3. 内核也不是通过轮询的方式找到就绪的 `fd` 了 ，而是通过异步唤醒机制
 
 
 
