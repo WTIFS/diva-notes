@@ -22,7 +22,11 @@ type runtimeTimer struct {
 ```
 
 `time` 包提供了2种方法来新建 `Timer`：`time.NewTimer` 和 `time.AfterFunc`
+
+
+
 ### 1.1 NewTimer
+
 ```go
 // 返回1个Timer，该Timer在 至少 d 时间后向 channel 发送时间
 func NewTimer(d Duration) *Timer {
