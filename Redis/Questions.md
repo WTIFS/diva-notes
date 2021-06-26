@@ -184,3 +184,9 @@ AOF通过日志，对数据的写入修改操作进行记录。这种持久化�
 **RDB与AOF优缺点比较**
 
 AOF占用的文件体积比RDB大。一般来说利用AOF备份对系统的消耗比RDB低。对于备份时出现系统故障，RDB数据可能会全丢，但AOF只会损失一部分。RDB恢复速度比AOF低。
+
+
+
+# 参考
+
+[后端技术小牛说](https://mp.weixin.qq.com/s/paHphwGFE9AsJFWkayZkCg)
