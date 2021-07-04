@@ -175,6 +175,16 @@ PageHeap是对堆内存的抽象，PageHeap存的也是若干链表，链表保�
 
 
 
+小对象的分配流程：ThreadCache -> CentralCache -> HeapPage，大部分时候，ThreadCache缓存都是足够的，不需要去访问CentralCache和HeapPage，无系统调用配合无锁分配，分配效率是非常高的。
+
+中对象分配流程：直接在 PageHeap 中选择适当的大小即可，128 Page的Span所保存的最大内存就是1MB。
+
+大对象分配流程：还有个 large span set, 专门给大对象用的，从中选择合适数量的页面组成span，用来存储数据。
+
+
+
+
+
 
 ## 参考
 
