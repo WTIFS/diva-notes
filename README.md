@@ -5,7 +5,7 @@ My study notes.
 # Catologue
 
 - [Algorithm](Algorithm)
-- [Distributed System](Distributed System)
+- [Distributed System](Distributed%20System)
 - [Go](Go)
 - [HTTP](HTTP)
 - [Kafka](Kafka)
