@@ -1,6 +1,7 @@
 # 概述
 其实底层还是用的 `map`, 就是对 `map` 做了封装。主要思想是冗余的用了2个 `map`，`read` 和 `dirty`, 读写分离。
-读写的时候先找 `read`, 不加锁, 写的时候使用 `CAS`; 之后再找 `dirty`。读写 `dirty` 时才加锁。
+
+读写的时候先找 `read`, 不加锁, 写的时候使用 `CAS`; 之后再找 `dirty`, 读写 `dirty` 时才加锁。
 
 
 
@@ -158,9 +159,9 @@ func (m *Map) Store(key, value interface{}) {
 
 # 总结
 1. 空间换时间：通过冗余的两个数据结构(read、dirty)，减少加锁对性能的影响。
-2. 使用只读数据(read)，避免读写冲突。
+2. 使用只读数据 (read)，避免读写冲突。
 3. 动态调整，miss次数多了之后，将dirty数据迁移到read中。
 4. double-checking。
 5. 延迟删除。 删除一个键值只是打标记 (go的map都是这样，这个不是sync.Map特有的)。只有在迁移dirty数据的时候才清理删除的数据。
 6. 优先从read读取、更新、删除，因为对read的读取不需要锁。
-7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如[concurrent-map](https://github.com/orcaman/concurrent-map)
+7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如 [concurrent-map](https://github.com/orcaman/concurrent-map)
