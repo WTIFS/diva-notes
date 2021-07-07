@@ -1,7 +1,11 @@
 # 概述
-其实底层还是用的 `map`, 就是对 `map` 做了封装。主要思想是冗余的用了2个 `map`，`read` 和 `dirty`, 读写分离。
+其实底层还是用的 `map`，就是对 `map` 做了封装。主要思想是做分区，底层用了2个 `map`，`read` 和 `dirty`，将频繁变更的数据，和极少变更的数据分离。
 
-读写的时候先找 `read`, 不加锁, 写的时候使用 `CAS`; 之后再找 `dirty`, 读写 `dirty` 时才加锁。
+极少变更的数据放到 `read` 里，读 `read` 无需加锁，更新 `read` 依靠 `CAS` 也不用加锁，性能极高。
+
+频繁变更的数据放到 `dirty` 里。这类数据的读写需要加锁。
+
+读取数据时，先查 `read`，再查 `dirty`，当读 `read` cache miss 累计到一定次数时，则将数据从 `dirty` 移入 `read`
 
 
 
@@ -64,6 +68,10 @@ p有三种值：
 
 ## 查找
 
+先查找 `read` ，`read` 中没有再查找 `dirty` ，并增加 `cache misses` 计数
+
+`cache misses` 数量累计至 `dirty` 的长度后，将 `dirty` 数据迁移至 `read` 中
+
 ```go
 // src/sync/map.go
 
@@ -114,7 +122,9 @@ func (m *Map) missLocked() {
 
 ## 新增和更新
 
-对 `read` 中已有的key，通过 `CAS` 来更新值；否则加锁并写入 `dirty`
+对 `read` 中已有的 `key` 做更新，通过 `CAS` 来更新值；
+
+新增 `key`，或者更新 `dirty` 中的数据，需要加锁并写入 `dirty`
 
 ```go
 // src/sync/map.go
@@ -130,19 +140,19 @@ func (m *Map) Store(key, value interface{}) {
     // m.read 中不存在
     m.mu.Lock()
     read, _ = m.read.Load().(readOnly)
-    if e, ok := read.m[key]; ok {
-        if e.unexpungeLocked() { // 未被标记成删除
-            m.dirty[key] = e     // 加入到dirty里
+    if e, ok := read.m[key]; ok { // double check
+        if e.unexpungeLocked() {  // 未被标记成删除
+            m.dirty[key] = e      // 加入到dirty里
         }
-        e.storeLocked(&value) // 设置值
+        e.storeLocked(&value)             // 设置值
     } else if e, ok := m.dirty[key]; ok { // 存在于 dirty 中，直接更新
         e.storeLocked(&value)
-    } else { // 新的值
-        if !read.amended { // m.dirty 中没有新数据，增加到 m.dirty 中
-            m.dirtyLocked() // 从 m.read中复制未删除的数据
-            m.read.Store(readOnly{m: read.m, amended: true}) // 将read.amended字段标记为true，下次查找会启用dirty查找
+    } else {                // read 和 dirty 中都没有，即插入新数据
+        if !read.amended {  // m.dirty为空，即向 dirty 中第一次加载数据
+            m.dirtyLocked() // 会将 read 里的所有数据加载到 dirty 中，并将 read 里的键值标记为 expunged
+            m.read.Store(readOnly{m: read.m, amended: true}) // 将 read.amended 字段标记为true，下次查找会启用dirty查找
         }
-        m.dirty[key] = newEntry(value) //将这个entry加入到m.dirty中
+        m.dirty[key] = newEntry(value) // 将这个entry加入到m.dirty中
     }
     m.mu.Unlock()
 }
