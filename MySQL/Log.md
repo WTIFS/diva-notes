@@ -67,6 +67,47 @@ InnoDB 的 redo log 是一个固定大小的**循环队列**。比如可以配�
 
 
 
+#### 记录格式
+
+redo log 是 **物理日志**，记录的是某个 `page` 上某行数据的变化，可以理解为数据行最新的快照。
+
+redo log 以块为单位进行存储，每块占 `512B`，称为 `redo log block`。每个块由3部分组成：日志块头、日志块尾，和日志主体。
+
+```go
+type redo log block struct {
+    log block header struct {  // 日志块头，12B
+        LOG_BLOCK_HDR_NO
+        LOG_BLOCK_HDR_LEN
+        LOG_BLOCK_FIRST_REC_GROUP
+        LOG_BLOCK_CHECKOUTPOINT_NO
+    }
+    log block                  // 日志主体，492B
+    log block tailer struct {  // 日志块尾，8B
+        LOG_BLOCK_TRL_NO
+    }
+}
+```
+
+
+
+其中 **日志主体** 又分为 4个部分：日志类型、空间ID、页偏移量、和数据部分。
+
+```go
+type log block struct {
+	type                 // 日志类型（插入/删除）
+	space                // 空间ID
+	page_no              // 页偏移量，表示第几页
+	struct {             // 数据部分
+		offset           // 第几行
+		len & extra_info // 以下结构只有插入日志才有，删除日志没有
+		...
+		rec body         // 新的数据
+	}
+}
+```
+
+
+
 
 
 # binlog
@@ -79,9 +120,10 @@ InnoDB 的 redo log 是一个固定大小的**循环队列**。比如可以配�
 
 这两种日志有以下三点不同：
 
-1. redo log 是 InnoDB 引擎特有的；binlog 是 MySQL 的 Server 层实现的，所有引擎都可以使用。
-2. redo log 是**物理日志**，记录的是 **数据页变更**；binlog 是**逻辑日志**，记录的是这个语句的原始逻辑，比如 "给 id=2 这一行的 c 字段加 1 "。
-3. redo log 是循环写的，空间固定会用完；binlog 是可以追加写入的，写到一定大小后会切换到下一个，并不会覆盖以前的日志。
+1. 层次不同。redo log 是 InnoDB 引擎特有的；binlog 是 MySQL 的 Server 层实现的，所有引擎都可以使用。
+2. 格式不同。redo log 是**物理日志**，记录的是 **数据页变更**；binlog 是**逻辑日志**，记录的是这个语句的原始逻辑，比如 "给 id=2 这一行的 c 字段加 1 "。
+3. 占用空间不同。redo log 是循环写的，空间固定会用完；binlog 是可以追加写入的，写到一定大小后会切换到下一个，并不会覆盖以前的日志。
+4. 写入时机不同，见下
 
 
 
@@ -149,7 +191,29 @@ binlog 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。默认
 
 # undo log
 
+Undo log 有两个作用：回滚和 `MVCC`。
 
+undo log 和 redo log 记录物理日志不一样，它是逻辑日志。可以认为当 delete 一条记录时，undo log 中会记录一条对应的 insert 记录，反之亦然，当 update  一条记录时，它记录一条对应相反的 update 记录。
+
+当执行回滚时，就可以从 undo log 中的逻辑记录读取到相应的内容并进行回滚。
+
+应用到行版本控制的时候，也是通过 undo log 来实现的：当读取的某一行被其他事务锁定时，它可以从 undo log 中分析出该行记录以前的数据是什么，从而提供该行版本信息，让用户实现非锁定一致性读取。
+
+undo log 默认存放在共享表空间中。可以通过配置，改到别的数据文件里。
+
+
+
+#### delete/update操作的内部机制
+
+当事务提交的时候，innodb 不会立即删除 undo log，因为后续还可能会用到 undo log，如隔离级别为 repeatable read 时，事务读取的都是开启事务时的最新提交行版本，只要该事务不结束，该行版本就不能删除，即 undo log 不能删除。
+
+但是在事务提交的时候，会将该事务对应的 undo log 放入到删除列表中，未来通过 `purge` 线程来删除。
+
+delete 操作实际上不会直接删除，而是将对象打上 delete flag，标记为删除，最终的删除操作是 `purge` 线程完成的。
+
+update 分为两种情况：
+- 如果更新的不是主键列，在 undo log 中直接反向记录是如何 update 的。即 update 是直接进行的。
+- 如果更新的是主键列，则先删除该行，再插入一行目标行，和 postgreSQL 一样。
 
 
 
