@@ -28,8 +28,8 @@ vim ~/.zshrc
 ```bash
 vim ~/.zshrc
 
-## 增加以下行:
-
+# 增加以下行:
+alias gs="git status"
 ```
 
 
