@@ -78,7 +78,8 @@ type m struct {
 
 ```go
 type g struct {
-    preempt       bool //抢占信号，标记G是否应该停下来被调度，让给别的G
+    preempt       bool       //抢占信号，标记G是否应该停下来被调度，让给别的G
+	timer          *timer    // cached timer for time.Sleep
 }
 ```
 
