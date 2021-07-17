@@ -1,6 +1,61 @@
+# 调度
+
+所谓并发，是指 CPU 一会儿处理几下 A 程序的代码，一会儿又处理几下 B 的，看起来就好像一秒内同时在处理 A 和 B 程序。
+
+而公平的分配 A 和 B 的运行时间，就是 **调度** 所做的事情。
+
+
+
+# Go 调度器的发展历程
+
+- 单线程调度器 0.x
+  - 程序中只能存在一个活跃线程，由 G-M 模型组成
+- 多线程调度器 1.0
+  - 允许运行多线程程序
+  - 全局锁导致竞争严重
+- 任务窃取调度器 1.1
+  - 引入了上下文P，构成了目前的 **M-P-G** 模型
+  - 实现了基于**工作窃取**的调度器
+  - 在某些情况下，Goroutine 不会让出线程，导致饥饿问题
+  - 时间过长的垃圾回收 (Stop the world, STW) 会导致程序长时间无法工作
+- 抢占式调度器 1.2 ~ 今
+  - 基于**协作**的抢占式调度器 1.2 ~ 1.13
+    - 通过编译器，在编译时向函数头部写入**抢占检查**代码，在函数调用时检查当前 `goroutine` 是否发起了抢占请求
+    - `goroutine` 可能会因为垃圾回收和循环长时间占用资源导致程度卡住
+  - 基于**信号**的抢占式调度器 1.14 ~ 今
+    - 实现基于信号的真·抢占式调度
+    - 垃圾回收在扫描栈时会触发抢占调度
+    - 抢占的时间点不够多，还不能覆盖全部的边缘情况
+
+
+
+
+
+# M，P 和 G
+
+Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`。
+
+**G**：代表一个 `goroutine`。
+
+- 每个 `goroutine` 都有自己独立的栈存放当前的运行内存及状态。可以把一个 `G` 当做一个任务，当 `goroutine` 被调离 CPU 时，调度器代码负责把 CPU 寄存器的值保存在 `G` 对象的成员变量之中。当 `goroutine` 被调度起来运行时，调度器代码又负责把 G 对象的成员变量所保存的寄存器的值恢复到 CPU 的寄存器。
+
+**M**：表示内核线程。它本身与一个内核线程进行绑定，每个工作线程都有唯一的一个 `M` 结构体的实例对象与之对应。
+
+- M 结构体对象除了记录着工作线程的诸如栈的起止位置、当前正在执行的Goroutine 以及是否空闲等等状态信息之外，还通过指针维持着与 P 结构体的实例对象之间的绑定关系。
+
+**P**：代表一个虚拟的处理器，它维护了一个本地可运行 `G` 队列，工作线程优先从这个队列里找 `G` 运行，提高了工作线程的并发性。每个 G 要想真正运行起来，首先需要被分配一个 P。
+
+除了上面三个结构体以外，还有一个存放所有可运行 `goroutine` 的容器 `schedt`。每个 Go 程序中 `schedt` 结构体只有一个实例对象，在代码中是一个共享的全局变量，每个工作线程都可以访问它以及它所拥有的 `goroutine` 运行队列。
+
+
+
+
+
 # 初代调度模型 MG
-`go` 的调度模型，一开始并不是 `MPG` 模型，而是经过了一个发展过程。老的调度模型只有 `G` 和 `M`，没有 `P`。
-它还有一个重要的数据结构：全局队列 `global runqueue`。全局队列是用来存放 `goroutine` 的。启动那么多 `goroutine`，总要一个地方把 `G` 存起来以便 `M` 来调用。
+
+老的调度模型只有 `G` 和 `M`，没有 `P`。
+
+它还有一个重要的数据结构：全局队列 `global runqueue`。全局队列是用来存放所有 `goroutine` 的。
 
 多个 `M` 会从这个全局队列里获取 `G` 来进行运行。所以必须对全局队列加锁保证互斥。这必然导致多个 `M` 对锁的竞争。这也是老调度器的一个缺点。
 
@@ -15,41 +70,66 @@
 
 # 次代调度模型 MPG
 
-在大神 Dmitry Vyokov 实现的次代调度模型里，加上了 `P` 结构体。每个 `P` 自己维护一个处于 `Runnable` 状态的 `G` 的队列，解决了原来的全局锁问题。
+在大神 Dmitry Vyokov 实现的次代调度模型里，加上了 `P` 结构体。每个 `P` 自己维护一个 `G` 的队列，解决了原来的全局锁问题。
 
 原来是一把大锁，锁定了全局协程队列这样一个共享资源，导致了很多激烈的锁竞争。如果我们要优化，很自然的就能想到，把锁的粒度细化来提高减少锁竞争，也就是把全局队列拆成局部队列。
 
 
-支撑整个调度器的主要有4个重要结构，分别是`M、G、P、Schedt(schedule)`，前三个定义在 `runtime.h` 中，`Sched` 定义在 `proc.c` 中。
+支撑整个调度器的主要有 4 个结构，分别是 `M、G、P、Schedt(schedule)`，前三个定义在 `runtime.h` 中，`Sched` 定义在 `proc.c` 中。
 
 
 
-## Schedt
+# 详情
 
-- `Schedt` 结构就是调度器，它维护有存储`M`和`G`的队列以及调度器的一些状态信息等。
-- 全局调度器，全局只有一个 schedt 类型的实例:
+## G (goroutine) 
+
+- `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
+- `G` 并非执行体，它仅仅保存并发任务状态，为任务提供所需要的栈空间
+- `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
+
+```go
+type g struct {
+    stack       stack      // 当前 Goroutine 的栈内存范围 [stack.lo, stack.hi) 
+    m           *m         // 当前 Goroutine 绑定的 M
+    sched       gobuf      // 调度相关的数据，上下文切换时就更新这个
+    preempt     bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
+	  timer       *timer     // 给 time.Sleep 用的 timer
+}
+```
+
+#### sudog
+
+当 `G` 遇到阻塞 / 需要等待的场景时，（比如向 `channel` 发送/接收内容时），会被封装为 `sudog` 这样一个结构。一个 `G` 可能被封装为多个 `sudog` 分别挂在不同的等待队列上。
 
 
 
 ## M (Machine) 内核级线程
 
-- 一个 `M` 就是一个用户级线程；`M` 是一个很大的结构，里面维护小对象内存 `cache`、当前执行的`goroutine`、随机数发生器等等非常多的信息。
+- 一个 `M` 就是一个用户级线程
+- `M` 是一个很大的结构，里面维护小对象内存 `cache`、当前执行的`goroutine`、随机数发生器等等非常多的信息。
 - `M` 的数量目前最多10000个
 - `M` 通过修改寄存器，将执行栈指向 `G` 自带的栈内存，并在此空间内分配堆栈帧，执行任务函数
-- 中途切换时，将寄存器值保存回 `G` 的空间即可维持状态，任何 `M` 都可以恢复这个 `G`。线程只负责执行，不保存状态，这是并发任务跨线程调度，实现多路复用的根本所在
+- 中途切换时，将寄存器值保存回 `G` 的 `sched` 字段即可记录状态，任何 `M` 都可以通过读这个 `G` 的该字段来恢复该 `G `的状态。线程 `M` 本身只负责执行，不保存状态。这是并发任务跨线程调度，实现多路复用的根本所在
 
 ```go
 type m struct {
-    g0         *g     // 用来执行调度指令的 goroutine，调度和执行系统调用时会切换到这个 G，通过这个g0, M 可以无 P 执行原生代码
-    curg              // 当前运行的g
-    preemptoff string // 该字段不等于空字符串的话，要保持 curg 始终在这个 m 上运行
-    locks      int32  // locks表示该M是否被锁的状态，M被锁的状态下该M无法执行gc
+    g0         *g     // 预留用于执行调度指令的 G。调度和执行 syscall 时会切换到这个 G。通过它, M 可以无 P 执行原生代码
+
+    curg              // 当前运行的 G
+    preemptoff string // 是否保持 curg 始终在这个 M 上运行
+  
+    p             puintptr // 当前挂的 P 
+    nextp         puintptr // 下一个 P
+    oldp          puintptr // 上一个运行的 P
+  
+    locks      int32  // 表示该 M 是否被锁，M 被锁的状态下该 M 无法执行 GC
     spinning   bool   // 是否自旋，自旋就表示M正在找G来运行。自旋状态的 `M` = 正在找工作 = 空闲的 `M`
     blocked    bool   // m是否被阻塞
 }
 ```
 
 `M` 并没有像 `G` 和 `P` 一样的状态标记, 但可以认为一个 `M` 有以下的状态:
+
 1. 自旋中 `spinning`: `M` 正在从运行队列获取`G`, 这时候 `M` 会拥有一个 `P`
 2. 执行 `go` 代码中:  `M` 正在执行 `go` 代码, 这时候 `M` 会拥有一个 `P`
 3. 执行原生代码中: `M` 正在执行原生代码或者阻塞的 `syscall`, 这时 `M` 并不拥有 `P`（`M` 可以无 `P` 执行原生代码，运行在 `g0` 上）
@@ -62,49 +142,66 @@ type m struct {
 
 
 ## P (Processor)，处理器
-- 它的主要用途就是用来执行 `goroutine` 的，所以它也维护了一个 `goroutine` 队列 `run queue`，即常说的本地队列，里面存储了所有需要它来执行的 `goroutine`。
-- `P` 是用一个全局数组 (255) 来保存的，并且维护着一个全局的空闲 `P` 链表
-- 为了避免竞争锁（解决初代模型最大的问题），每个 `P` 都有自己的本地队列。
+- `P` 是线程 `M` 和 `G` 的中间层，用于调度 `G` 在 `M` 上执行。
+- `P` 自身是用一个全局数组 (长度255) 来保存的，放在 `schedt` 结构体里
+- 它的主要用途就是用来执行 `goroutine` 的，所以它维护了一个本地 `G` 队列，里面存储了所有需要它来执行的 `goroutine`。
+  - 本地队列避免了竞争锁（解决了初代模型最大的问题）。
 - `P` 为线程提供了执行资源，如对象分配内存，本地任务队列等。线程独享 `P` 资源，可以无锁操作
 - 为何要维护多个 `P` 呢？是为了当一个 OS线程 `M` 陷入阻塞时，`P` 能从之前的 `M` 上脱离，转而在另一个 `M` 上运行
-- `P` 控制了程序的并行度，如果只有一个 `P`，那么同时只能执行一个任务，可以通过 `GOMAXPROCS` 设置 `P` 的个数
-
-
-
-## G (goroutine) 
-- `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
-- `G` 并非执行体，它仅仅保存并发任务状态，为任务提供所需要的栈空间
-- `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
+- `P` 控制了程序的并行度。可以通过 `GOMAXPROCS` 设置 `P` 的个数，最多只能有 `GOMAXPROCS` 个线程能并行，一般设为 CPU 核数
 
 ```go
-type g struct {
-    preempt       bool       //抢占信号，标记G是否应该停下来被调度，让给别的G
-	timer          *timer    // cached timer for time.Sleep
+type p struct {
+    m           muintptr    // 挂载的 M
+     
+    mcache      *mcache     // 用于内存分配的结构体
+  
+    runq     [256]guintptr  // 本地可运行的 G 队列，local runqueue
+    runqhead uint32         // 队头
+    runqtail uint32         // 队尾
+    runnext guintptr        // 缓存可立即执行的 G
 }
 ```
 
-#### sudog
-
-当 `G` 遇到阻塞，或需要等待的场景时，会被打包成 `sudog` 这样一个结构。一个 `G` 可能被打包为多个 `sudog` 分别挂在不同的等待队列上。
-`sudog` 代表在等待列表里的 `G`，比如向 `channel` 发送/接收内容时
 
 
+## Schedt
+
+- `Schedt` 结构就是调度器，它维护有存储 `M` 和 `G `的队列以及调度器的一些状态信息等。
+- 它是一个共享的全局变量，全局只有一个 `schedt` 类型的实例。
+
+```go
+type schedt struct {
+    
+    lock mutex 
+     
+    midle        muintptr  // 空闲的 M 列表
+    nmidle       int32     // 空闲的 M 列表数量
+    mnext        int64     // 下一个被创建的 M 的 id
+    maxmcount    int32     // M 的最大数量，初始化时设为 10000，即最多 10000 个 M
+    nmspinning uint32      // 处于自旋状态的 M 的数量
+
+    pidle      puintptr    // 空闲 p 链表
+    npidle     uint32      // 空闲 p 数量
+    
+    runq     gQueue        // 全局 runnable G 队列
+    runqsize int32         // 全局 G 队列的长度
+   
+    
+    sudoglock  mutex       // sudog 结构的集中缓存
+    sudogcache *sudog 
+    
+    deferlock mutex
+    deferpool [5]*_defer   // defer 结构的池
+}
+```
 
 
-# 关系
-
-地鼠 (gopher) 用小车运着一堆待加工的砖。`M` 可以看作的地鼠，`P` 就是小车，`G` 就是小车里装的砖。
 
 
 
-#### 抛弃P
-你可能会想，为什么一定需要一个上下文 `P`，我们能不能去掉上下文，让 `runqueues` 直接挂到 `M` 上呢？答案是不行，需要 `P` 的目的，是为了在内核线程阻塞的时候，可以直接放开其他线程。
+# 实现
 
-一个很简单的例子就是系统调用 `sysall`，一个线程肯定不能同时执行代码和系统调用被阻塞，这个时候，此线程 `M` 需要放弃当前的上下文环境 `P`，让其余 `M` 继续执行 `P` 中的其他 `G`。以便可以让其他的`Goroutine` 被调度执行。
-
-
-
-# 调度实现
 ## 程序启动
 - 调度器初始化 `runtime.schedinit`
     - `schedinit` 函数主要根据用户设置的 `GOMAXPROCS` 值来创建一批 `P`，不管 `GOMAXPROCS` 设置为多大，最多也只能创建 256 个 `P`。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
@@ -121,9 +218,27 @@ type g struct {
 - 使用 `go func()` 关键字时，会调用 `newproc`，创建新的 `goroutine`
 - 新的 `goroutine` 会被加到本地队列里
   - 通过 `go` 关键字新建的协程，会被放到本地队列的头部
-  - 到了调度的点后，会从 `runqueue pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
+  - 到了调度的点后，会从队列里 `pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
 - `P` 的本地队列长度超过 64 时，里面一半的 `G` 会被转移至全局队列
 - `findrunnable`，见下
+
+```go
+// 创建新的 G
+func newproc(siz int32, fn *funcval) {
+    
+    gp := getg()        // 获取当前的 G 
+    pc := getcallerpc() // 获取调用者的程序计数器 PC
+  
+    systemstack(func() {
+       
+        newg := newproc1(fn, argp, siz, gp, pc)  // 创建新的 G 结构体
+        _p_ := getg().m.p.ptr()   
+        runqput(_p_, newg, true)                 // 将 G 加入到 P 的运行队列
+    })
+}
+```
+
+
 
 ```go
 // runtime/proc.go
@@ -135,8 +250,8 @@ type g struct {
 func runqput(_p_ *p, gp *g, next bool) {
     if next {
         oldnext := _p_.runnext
-        _p_.runnext.cas(oldnext, guintptr(unsafe.Pointer(gp))) //直接写入 runnext 字段
-        gp = oldnext.ptr()                                     //原 runnext 里的 G 后面会被踢到全局队列
+        _p_.runnext.cas(oldnext, guintptr(unsafe.Pointer(gp))) // 直接写入 runnext 字段
+        gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到全局队列
     }
     
     h := atomic.LoadAcq(&_p_.runqhead)            // 队头
@@ -185,17 +300,17 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 
 ## 调度 schedule()
 
-1. 调度器每调度61次，从全局队列里取一次 `G`，以避免饥饿
-2. `runqget`, `M`试图从自己的 `P` 的本地队列里取出一个任务`G`
+1. 调度器每调度 61 次，从全局队列里取一次 `G`，以避免饥饿
+2. 调用 `runqget` 从 `P` 本地的运行队列中查找待执行的 `G`
 3. `findrunnable` ，依次从本地、全局、netpoll、偷窃里取 `G`
     - 再次从 `local runq` 获取 `G`
     - 去 `global runq` 获取（因为前面仅仅是1/61的概率）
     - 执行 `netpoll`，检查是否有 `io`就绪的 `G`
-    - 如果还是没有，那么随机选择一个P，偷其 `runqueue` 里的一半。（这里的随机用到了一种质数算法，保证既随机，每个P又都能被访问到）
+    - 如果还是没有，那么随机选择一个 `P`，偷其 `runqueue` 里的一半。（这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到）
     - 偷窃前会将 `M` 的自旋状态设为 `true`，偷窃后再改回去
-    - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身 `sleep`（放回`M`池子）
+    - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身休眠（放回`M`池子）
 
-4. `wakep`, 另一种情况是，`M`太忙了，如果`P`池子里有空闲的`P`，会唤醒其他`sleep`状态的`M`一起干活。如果没有`sleep`状态的`M`，`runtime`会新建一个`M`。
+4. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的`P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime`会新建一个`M`。
 
 5. `execute`，执行代码。
 
@@ -296,11 +411,18 @@ func globrunqget(_p_ *p, max int32) *g {
 
 
 
-## 线程阻塞
+## 调度时机
 
-- 在同一时刻，一个线程上只能跑一个 `goroutine`。当 `goroutine` 发生阻塞（例如向一个五环充 `channel` 发送数据）时，`runtime` 会把当前 `goroutine` 调度走，让其他 `goroutine` 来执行。目的就是不让一个线程闲着，榨干 CPU 的每一滴油水。
+- 阻塞性系统调用，比如文件 IO，网络IO
+  - Golang 重写了所有系统调用，在系统调用里加入了调度逻辑（更改 `G`状态、`M` 和`P` 解绑、 `schedule `等）
+- time系列定时操作
+  - `time.Sleep` 会调用 `gopark`、`goready` 等
+- `go func` 的时候、`func` 执行完的时候
+- 管道读写阻塞的时候
+- 垃圾回收之后
+- 主动调用 `runtime.Gosched()`，这个很少见，一般调试才用
 
-- 当一个 `M` 陷入阻塞、阻塞结束后返回时，它会尝试取一个 `P` 来继续执行后面的。如果没有可用的 `P`，那么它会把 `G` 放到全局队列里，然后自身睡眠。
+
 
 
 
@@ -313,9 +435,14 @@ func globrunqget(_p_ *p, max int32) *g {
 
 
 
-# 参考
+#### 参考
 
-[The Go Scheduler](https://morsmachine.dk/go-scheduler)
-[Golang调度与MPG](https://www.jianshu.com/p/af80342a1233)
-[深入理解Go语言(03)：scheduler调度器 - 基本介绍](https://www.cnblogs.com/jiujuan/p/12735559.html)
-[golang 调度学习-综述](https://blog.csdn.net/diaosssss/article/details/92830782)
+> [The Go Scheduler](https://morsmachine.dk/go-scheduler)
+>
+> [Golang调度与MPG](https://www.jianshu.com/p/af80342a1233)
+>
+> [深入理解Go语言(03)：scheduler调度器 - 基本介绍](https://www.cnblogs.com/jiujuan/p/12735559.html)
+>
+> [golang 调度学习-综述](https://blog.csdn.net/diaosssss/article/details/92830782)
+>
+> [golang核心原理-协程调度时机](https://studygolang.com/articles/34362)
