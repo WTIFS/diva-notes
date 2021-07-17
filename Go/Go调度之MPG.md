@@ -305,7 +305,7 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 3. `findrunnable` ，依次从本地、全局、netpoll、偷窃里取 `G`
     - 再次从 `local runq` 获取 `G`
     - 去 `global runq` 获取（因为前面仅仅是1/61的概率）
-    - 执行 `netpoll`，检查是否有 `io`就绪的 `G`
+    - 执行 `netpoll`，检查是否有 `IO` 就绪的 `G`
     - 如果还是没有，那么随机选择一个 `P`，偷其 `runqueue` 里的一半。（这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到）
     - 偷窃前会将 `M` 的自旋状态设为 `true`，偷窃后再改回去
     - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身休眠（放回`M`池子）
@@ -362,6 +362,9 @@ func schedule() {
 // 寻找可执行的 G
 // Tries to steal from other P's, get g from local or global queue, poll network.
 func findrunnable() (gp *g, inheritTime bool) {
+  	
+    now, pollUntil, _ := checkTimers(_p_, 0) // 检查 P 中的定时器，参考 Timer 的实现那篇文章
+  	
     // 本地队列
     if gp, inheritTime := runqget(_p_); gp != nil {
         return gp, inheritTime

@@ -10,11 +10,13 @@
     - 每个桶一个 `timeproc` 协程
 - `go1.14` 
   - 不再使用64个桶，四叉堆改放到 `P` 里
-  - 不再使用 `timeproc` 协程调度，改为使用 `netpoll` 来让定时器的到期后直接得到通知，其工作原理和 `epoll` 一样
+  - 不再使用 `timeproc` 协程调度，改为在调度时触发定时器的检查，避免了 `timeproc` 的上下文切换，及其自身协程的调度
 - 其它方案
   - 时间轮
-    - 比如将 1秒 分成长度为 1000 的环形队列，则每段槽表示 1ms，每 1ms 扫描一下该段上的 `timer`
-    - 可以像时分秒的设计一样，使用多层时间轮组合，即可表示更多的时间
+    - 比如将 1秒 分成长度为 1000 的环形队列，则每个格子表示 1ms
+    - 再起个死循环进程，不断判断当前时间所属的格子上，是否有定时任务需要执行
+    - 可以像时分秒的设计一样，使用多层时间轮组合，即可组合表示更多的时间
+    - 槽多，可以很大程度减少锁竞争
     - `kafka` 用的就是这种方案
   - 对于持续性定时的 `ticker` 类型，只需要将其从堆/队列里取出，调整下次到期时间，再放回去即可，类似递归
 
@@ -48,7 +50,7 @@ type runtimeTimer struct {
 
 // runtime2.go
 type p struct {
-    timersLock mutex // ?? 还以为放到P里可以无锁，怎么这里还是有锁
+    timersLock mutex // 仍然有锁，因为任务窃取时，timers 也会被别的 P 窃取
     timers []*timer  // 四叉堆，存放定时器任务
 }
 ```
@@ -114,8 +116,6 @@ func addInitializedTimer(t *timer) {
     
     ok := cleantimers(pp) && doaddtimer(pp, t) // 清理最小堆里的失效节点 && 把新建的 timer 放到堆里
     unlock(&pp.timersLock)
-    
-    wakeNetPoller(when)                        // 唤醒 netpoller 中休眠的线程
 }
 ```
 
@@ -139,7 +139,7 @@ func cleantimers(pp *p) {
 			case timerModifiedEarlier, timerModifiedLater: // timer 被修改到了更早或更晚的时间
 				t.when = t.nextwhen                        // 设置新的 when 字段
 				dodeltimer0(pp)                            // 删除
-                doaddtimer(pp, t)                          // 设置新的 when 字段后重新放回堆
+        doaddtimer(pp, t)                          // 设置新的 when 字段后重新放回堆
 		}
 	}
 }
@@ -170,46 +170,117 @@ func doaddtimer(pp *p, t *timer) {
 
 
 
-##### **runtime.wakeNetPoller**
 
-`wakeNetPoller` 主要是将 `timer` 下次调度的时间和 `netpoller` 的下一次轮询时间相比，如果小于的话，调用 `netpollBreak` 向 `netpollBreakWr` 管道里面写入数据，立即中断 `netpoll`
+
+### timer 的运行
+
+timer 的运行是交给 `runtime.runtimer` 函数执行的，这个函数会不断检查 `P` 上最小堆堆顶 `timer` 的状态，根据状态做不同的处理。
+
+运行时会根据 `period` 判断该 `timer` 是否为 `ticker` 类型，需要反复执行。是的话需要重设下次执行时间，并调整该` timer` 在堆中的位置。一次性 `timer` 的话会删除该 timer。最后运行 `timer` 中的回调函数
 
 ```go
-var (
-    epfd int32 = -1                        // epoll descriptor
-    netpollBreakRd, netpollBreakWr uintptr // 用来给netpoll中断
-)
-
-// 初始化全局的epfd及break的两个读写管道
-func netpollinit() {
-    epfd = epollcreate1(_EPOLL_CLOEXEC)
-
-    r, w, errno := nonblockingPipe()                // r为管道的读端，w为写端
-
-    errno = epollctl(epfd, _EPOLL_CTL_ADD, r, &ev)  // epollctl 进行监听
-
-    netpollBreakRd = uintptr(r)
-    netpollBreakWr = uintptr(w)
-}
-
-// 上文添加定时器时，如果定时器的 when 小于 pollUntil 时间，则唤醒正在 netpoll 休眠的线程
-func wakeNetPoller(when int64) {
-    if atomic.Load64(&sched.lastpoll) == 0 {
-        pollerPollUntil := int64(atomic.Load64(&sched.pollUntil))
-        if pollerPollUntil == 0 || pollerPollUntil > when {
-            netpollBreak()
+// runtime/time.go
+func runtimer(pp *p, now int64) int64 {
+    for {
+        t := pp.timers[0] // 获取最小堆的堆顶元素
+      
+        // 判断 timer 状态
+        switch s := atomic.Load(&t.status); s {
+       
+            case timerWaiting:                    
+                if t.when > now { return t.when }         // 还没到时间，返回下次执行时间
+                runOneTimer(pp, t, now)                   // 运行该 timer
+                return 0
+          
+            
+            case timerDeleted:                             // 删除           
+                dodeltimer0(pp)
+          
+            case timerModifiedEarlier, timerModifiedLater: // 被修改，需要调整位置
+                t.when = t.nextwhen
+                dodeltimer0(pp)                            // 删除最小堆的第一个 timer
+                doaddtimer(pp, t)                          // 将该 timer 重新添加到最小堆
         }
     }
 }
 
-// netpollBreakWr 是一个管道，用 write 给 netpollBreakWr 写数据，这样 netpoll 自然就可被唤醒。
-func netpollBreak() {
+// 运行一次 timer 回调函数
+func runOneTimer(pp *p, t *timer, now int64) {
+   
+    // 表示该 timer 为 ticker，需要再次触发
+    if t.period > 0 {  
+        
+        delta := t.when - now 
+        t.when += t.period * (1 + -delta/t.period) // 调整触发时间
+        siftdownTimer(pp.timers, 0)                // 调整堆位置
+        updateTimer0When(pp)
+      
+    // 一次性 timer
+    } else {
+        dodeltimer0(pp) // 删除该 timer
+    }  
+    
+    f := t.f                // 回调函数
+    arg := t.arg            // 回调函数的参数
+    seq := t.seq
+    unlock(&pp.timersLock)  // 这里有点费解，一般是先 lock 再 unlock。这里应该是为了运行回调时不阻塞其他的 timer
+    f(arg, seq)             // 运行该函数
+    lock(&pp.timersLock)
+}
+```
+
+
+
+
+
+### timer 的触发 / 唤醒
+
+`timer` 的触发有两种：
+
+- 从调度循环中触发
+  - 调用 `runtime.schedule` 执行调度时
+  - 调用`runtime.findrunnable` 获取可执行 `G` / 执行抢占时
+- `sysmon` 监控中会定时触发
+
+
+
+**runtime.schedule**
+
+```go
+// runtime.schedule
+func schedule() {
+    _g_ := getg()
+  
+top:
+    pp := _g_.m.p.ptr()
+    
+    checkTimers(pp, 0) // 检查是否有可执行 timer 并执行，里面会调用前文写到的 runtimer
+  
+    var gp *g
+    if gp == nil {
+        gp, inheritTime = findrunnable() // blocks until work is available
+    }
+    execute(gp, inheritTime)
+}
+```
+
+
+
+**runtime.sysmon**
+
+```go
+func sysmon() {
     for {
-        var b byte
-        n := write(netpollBreakWr, unsafe.Pointer(&b), 1)
+        now := nanotime()
+        next, _ := timeSleepUntil() // 下次需要调度的 timer 到期时间
+        if next < now {             // 如果有 timer 到期 
+            startm(nil, false)      // 启动新的 M 处理 timer
+        }
     }
 }
 ```
+
+
 
 
 
