@@ -88,16 +88,20 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 - `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
 
 ```go
+// runtime/runtime2.go
 type g struct {
     stack       stack      // 当前 Goroutine 的栈内存范围 [stack.lo, stack.hi) 
     m           *m         // 当前 Goroutine 绑定的 M
     sched       gobuf      // 调度相关的数据，上下文切换时就更新这个
     preempt     bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
 	  timer       *timer     // 给 time.Sleep 用的 timer
+  
+  	_panic       *_panic   // panic链表
+	  _defer       *_defer   // defer链表
 }
 ```
 
-#### sudog
+##### sudog
 
 当 `G` 遇到阻塞 / 需要等待的场景时，（比如向 `channel` 发送/接收内容时），会被封装为 `sudog` 这样一个结构。一个 `G` 可能被封装为多个 `sudog` 分别挂在不同的等待队列上。
 

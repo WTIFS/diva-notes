@@ -1,19 +1,19 @@
 # Timer的实现
 - `go1.10` 及之前
   - 一个全局最小堆
-    - 最小堆是非常常见的用来管理 timer 的数据结构。在最小堆中，作为排序依据的 key 是 timer 的 `when` 属性，也就是何时触发。即最近一次触发的 timer 将会处于堆顶。
+    - 最小堆是非常常见的用来管理 `timer` 的数据结构。在最小堆中，作为排序依据的 `key` 是 `timer` 的 `when` 属性，也就是何时触发。即最近一次触发的 `timer` 将会处于堆顶。
   - 再起一个叫 `timeproc` 的协程负责调度 `timer`，持续检查堆顶 `timer`是否到期，并触发对应的回调
 - `go1.0 ~ go1.13` 
-  - 上述方案存在锁竞争；且堆体积较大，插入/删除效率低
-  - 64个全局桶 + 四叉堆
-    - 将所有定时器分布到 64 个最小堆中, 减小每个堆的数据量，插入时用 `P` 的 `id` 取模找堆，降低锁粒度
+  - 上述方案存在锁竞争；且堆体积较大，插入 / 删除效率低
+  - 64 个全局桶 + 四叉堆
+    - 将所有定时器打散到 64 个最小堆中，减小每个堆的数据量，插入时用 `P` 的 `id` 取模找堆，降低锁粒度
     - 每个桶一个 `timeproc` 协程
 - `go1.14` 
-  - 不再使用64个桶，四叉堆改放到 `P` 里
-  - 不再使用 `timeproc` 协程调度，改为在调度时触发定时器的检查，避免了 `timeproc` 的上下文切换，及其自身协程的调度
+  - 不再使用 64 个桶，四叉堆改放到 `P` 里
+  - 不再使用 `timeproc` 协程调度，改为在调度时触发定时器的检查，避免了 `timeproc` 的上下文切换、调度
 - 其它方案
   - 时间轮
-    - 比如将 1秒 分成长度为 1000 的环形队列，则每个格子表示 1ms
+    - 比如将 1 秒 分成长度为 1000 的环形队列，则每个格子表示 1ms
     - 再起个死循环进程，不断判断当前时间所属的格子上，是否有定时任务需要执行
     - 可以像时分秒的设计一样，使用多层时间轮组合，即可组合表示更多的时间
     - 槽多，可以很大程度减少锁竞争
@@ -28,7 +28,7 @@
 
 ## 1. 底层结构
 
-`timer` 主要关注3个属性：用于通知外层时间的 `channel`、用于判断触发时间的 `when`，和回调用的函数 `f`
+`timer` 主要关注 3 个属性：用于通知外层时间的 `channel`、用于判断触发时间的 `when`，和回调用的函数 `f`
 
 ```go
 // time/sleep.go
@@ -38,11 +38,11 @@ type Timer struct {
 }
 
 type runtimeTimer struct {
-    pp       uintptr                    // p的位置
+    pp       uintptr                    // 所属 P
     when     int64                      // timer 触发的绝对时间，计算方式就是当前时间加上 duration
-    period   int64                      // 周期时间，适合ticker
-    f        func(interface{}, uintptr) // 回调方法。timer触发时，需要执行的函数。不可为闭包。
-    arg      interface{}                // 传给f的参数
+    period   int64                      // 周期时间，适合 ticker
+    f        func(interface{}, uintptr) // 回调函数。timer 触发时，需要执行的函数。不可为闭包。
+    arg      interface{}                // 传给 f 的参数
     seq      uintptr                    // 序号
     nextwhen int64                      // 下次的到期时间
     status   uint32                     // 状态
@@ -61,12 +61,13 @@ type p struct {
 
 ### 1.1 初始化 NewTimer
 
-`go` 里 `timer` 的回调就是 `sendTime`，即向 `channel` 中发送当前时间。
+`NewTimer` 里 `timer` 的回调就是 `sendTime`，即向 `channel` 中发送当前时间。
 
 外层监听这个 `channel`，就可以知道定时器是否到时间了。
 
 ```go
-// 返回1个Timer，该Timer在 至少 d 时间后向 channel 发送时间
+// time/sleep.go
+// 返回1个 Timer，该 Timer 在 至少 d 时间后向 channel 发送时间
 func NewTimer(d Duration) *Timer {
     c := make(chan Time, 1)
     t := &Timer{
@@ -81,11 +82,16 @@ func NewTimer(d Duration) *Timer {
     return t
 }
 
+// 向 channel 里写入时间
 func sendTime(c interface{}, seq uintptr) {
     select {
-    case c.(chan Time) <- Now():
-    default:
+        case c.(chan Time) <- Now():
+        default:
     }
+}
+
+// 这个和 NewTimer 差不多，只是回调不一样，这里回调是参数
+func AfterFunc(d Duration, f func()) *Timer {
 }
 ```
 
@@ -174,9 +180,9 @@ func doaddtimer(pp *p, t *timer) {
 
 ### timer 的运行
 
-timer 的运行是交给 `runtime.runtimer` 函数执行的，这个函数会不断检查 `P` 上最小堆堆顶 `timer` 的状态，根据状态做不同的处理。
+`timer` 的运行是交给 `runtime.runtimer` 函数执行的，这个函数会不断检查 `P` 上最小堆堆顶 `timer` 的状态，根据状态做不同的处理。
 
-运行时会根据 `period` 判断该 `timer` 是否为 `ticker` 类型，需要反复执行。是的话需要重设下次执行时间，并调整该` timer` 在堆中的位置。一次性 `timer` 的话会删除该 timer。最后运行 `timer` 中的回调函数
+运行时会根据 `period` 判断该 `timer` 是否为 `ticker` 类型，是否需要反复执行。是的话需要重设下次执行时间，并调整该` timer` 在堆中的位置。一次性 `timer` 的话会删除该 `timer`。最后运行 `timer` 中的回调函数
 
 ```go
 // runtime/time.go
@@ -188,8 +194,8 @@ func runtimer(pp *p, now int64) int64 {
         switch s := atomic.Load(&t.status); s {
        
             case timerWaiting:                    
-                if t.when > now { return t.when }         // 还没到时间，返回下次执行时间
-                runOneTimer(pp, t, now)                   // 运行该 timer
+                if t.when > now { return t.when }          // 还没到时间，返回下次执行时间
+                runOneTimer(pp, t, now)                    // 运行该 timer
                 return 0
           
             
@@ -240,7 +246,7 @@ func runOneTimer(pp *p, t *timer, now int64) {
 - 从调度循环中触发
   - 调用 `runtime.schedule` 执行调度时
   - 调用`runtime.findrunnable` 获取可执行 `G` / 执行抢占时
-- `sysmon` 监控中会定时触发
+- `sysmon` 每轮监控中会触发
 
 
 
@@ -254,7 +260,7 @@ func schedule() {
 top:
     pp := _g_.m.p.ptr()
     
-    checkTimers(pp, 0) // 检查是否有可执行 timer 并执行，里面会调用前文写到的 runtimer
+    checkTimers(pp, 0) // 检查是否有可执行 timer 并执行，checkTimers 里面会调用前文写到的 runtimer
   
     var gp *g
     if gp == nil {
@@ -288,7 +294,7 @@ func sysmon() {
 
 1. 每个 `goroutine` 底层的 `G` 对象上，都有一个 `timer` 属性，这是个 `runtimeTimer` 对象，专门给 `sleep` 使用。当第一次调用 `sleep` 的时候，会创建这个 `runtimeTimer`，之后 `sleep` 的时候会一直复用这个 `timer` 对象。
 2. 调用 `sleep` 时，触发 `timer` 后，直接调用 `gopark`，将当前 `goroutine` 挂起。
-3. 调用 `callback` 的时候，不是像 `timer` 和 `ticker` 那样使用 `sendTime` 函数，而是直接调 `goready` 唤醒被挂起的 `goroutine`。
+3. 它的 `callback` 就是 `goready` ，回调时直接唤醒被挂起的 `goroutine`。
 
 
 
@@ -296,7 +302,7 @@ func sysmon() {
 
 #### 参考
 
-> [cyhone - Golang 定时器底层实现深度剖析](https://www.zhihu.com/people/cyhone/posts)
+> [cyhone - Golang 定时器底层实现深度剖析](https://zhuanlan.zhihu.com/p/149518569)
 >
 > [luozhiyun - Go中定时器实现原理及源码解析](https://www.cnblogs.com/luozhiyun/p/14494540.html)
 >
