@@ -28,7 +28,7 @@ type hmap struct {
     buckets    unsafe.Pointer // 指向 buckets 数组，大小为 2^B
     oldbuckets unsafe.Pointer // 旧桶的地址，用于扩容
     nevacuate  uintptr        // 指示扩容进度，小于此地址的 buckets 迁移完成
-    overflow *[2]*[]*bmap     // buckets 和 oldbuckets 的溢出区
+    overflow *[2]*[]*bmap     // map 里不含指针时，用这个存 buckets 和 oldbuckets 的溢出区，保证溢出区在扫描时能被扫到
 }
 ```
 
@@ -154,6 +154,15 @@ string	   mapaccess1_faststr(t *maptype, h *hmap, ky string) unsafe.Pointer
 
 
 
+如果遇到 `map` 正在扩容的情况，那查找之前还要先判读一下 `key` 是在新桶里还是旧桶里。
+
+```go
+m := 2^B -1 // mask
+b := (*bmap)(add(h.buckets, (hash&m) + uintptr(t.bucketsize))
+```
+
+
+
 
 
 # 扩容
@@ -162,7 +171,7 @@ string	   mapaccess1_faststr(t *maptype, h *hmap, ky string) unsafe.Pointer
 
 可以看到，同一个桶内，所有元素是组成链表连接起来的。如果一个某个桶内的链表元素过多，会导致查询性能下降。
 
-因此，需要有一个指标来衡量前面描述的情况，这就是**装载因子**。`Go` 里的 **装载因子** = **元素个数 / 桶数**
+因此，需要有一个指标来衡量前面描述的情况，这就是**负载因子**。`Go` 里的 **负载因子** = **元素个数 / 桶数**
 
 ```go
 loadFactor := count / (2^B)
@@ -181,17 +190,76 @@ loadFactor := count / (2^B)
 
 2. 对于条件 2，其实元素没那么多，但是 `overflow bucket` 数特别多，说明很多 `bucket` 都没装满。解决办法就是开辟一个新 `bucket` 空间，将老 `bucket` 中的元素移动到新 `bucket`，使得同一个 `bucket` 中的 `key` 排列地更紧密。这种叫 **等量扩容**。严格上说其实不算扩容，算整理碎片。
 
-
-
 由于扩容需要将原有的 `key/value` 重新搬迁到新的内存地址，如果有大量的 `key/value` 需要搬迁，会非常影响性能。因此 `Go map` 的扩容采取了 **渐进式扩容** 的方式，类似 `redis` 的扩容，原有的 `key` 并不会一次性搬迁完毕。
 
-上面说的 `hashGrow()` 函数实际上并没有真正地搬迁，它只是分配好了新的 `buckets`，并将老的 `buckets` 挂到了 `oldbuckets` 字段上。真正搬迁的动作在 `growWork()` 函数中，而调用 `growWork()` 函数的动作是在 `mapassign` 和 `mapdelete` 函数中。
-
-也就是插入或修改、删除 `key` 的时候，都会尝试进行搬迁 `buckets` 的工作。先检查 `oldbuckets` 是否搬迁完毕，如果还没搬迁完，则协助进行搬迁。
+> 为啥负载因子是 6.5 ?
+>
+> 太小会导致极易触发扩容，造成空间浪费；太多会导致极不易触发扩容，造成 `overflow` 过多。
+>
+> 事实上作者测试了各负载因子下的 平均 `overflow` 数、命中率、`miss` 率等指标，最终取了一个中间数 6.5。
 
 
 
 ### 扩容过程
+
+扩容其实分为两步：`hashGrow()` 扩容 和 `growWork()` 搬迁。
+
+ `hashGrow()` 函数实际上并没有真正地搬迁，它只是分配好了新的 `buckets`，并将老的 `buckets` 挂到了 `oldbuckets` 字段上。
+
+```go
+func hashGrow(t *maptype, h *hmap) {
+    bigger := uint8(1)
+    if !overLoadFactor(int64(h.count), h.B) {  // 判断是增量扩容还是等量扩容
+        bigger = 0
+        h.flags |= sameSizeGrow
+    }
+        
+    oldbuckets := h.buckets // 将buckets赋值给oldbuckets
+    newbuckets := newarray(t.bucket, 1<<(h.B+bigger))
+    flags := h.flags &^ (iterator | oldIterator)
+    if h.flags&iterator != 0 {
+        flags |= oldIterator
+    }
+   
+    // 更新hmap的变量
+    h.B += bigger             // 更新 B           
+    h.flags = flags
+    h.oldbuckets = oldbuckets // 将buckets赋值给oldbuckets
+    h.buckets = newbuckets
+    h.nevacuate = 0
+    h.noverflow = 0
+    // 设置溢出桶
+    if h.overflow != nil {           // overflow[1] 表示旧桶，overflow[0] 表示新桶
+        if h.overflow[1] != nil {    // 如果已经有旧桶，说明有别的协程在扩容，抛出
+            throw("overflow is not nil")
+        }
+		
+        h.overflow[1] = h.overflow[0] // 赋值给旧桶
+        h.overflow[0] = nil
+    }
+}
+```
+
+
+
+
+
+### 搬迁过程
+
+搬迁的动作在 `growWork()` 函数中，而调用 `growWork()` 函数的动作是在 `mapassign` 和 `mapdelete` 函数中。
+
+也就是插入或修改、删除 `key` 的时候，都会尝试进行搬迁 `buckets` 的工作。先检查 `key` 所在的 `oldbuckets` 是否搬迁完毕，如果没有，则先对其进行搬迁。然后再检查其他搬迁状态过程中的桶，如果有，协助进行搬迁。
+
+```go
+func growWork(t *maptype, h *hmap, bucket uintptr) {
+    evacuate(t, h, bucket&h.oldbucketmask()) // 搬迁旧桶，这样assign和delete都直接在新桶集合中进行
+    if h.growing() {
+        evacuate(t, h, h.nevacuate)          // 再协助搬迁一次其他桶
+    }
+}
+```
+
+
 
 接下来，我们集中所有的精力在搬迁的关键函数 `evacuate`：
 
@@ -282,7 +350,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 			}
 		}
         
-		// 如果没有协程在使用老的 buckets，就把老 buckets 清除掉，帮助gc
+		// 如果没有协程在使用老的 buckets，就把老 buckets 清除掉，解除引用，清除内存，以便可以GC到
 		if h.flags&oldIterator == 0 {
 			memclrHasPointers(add(unsafe.Pointer(b), dataOffset), uintptr(t.bucketsize)-dataOffset)
 		}
@@ -355,17 +423,24 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 流程和写是一样的，只不过对指针就赋值 `nil`，对非指针就调用 `typedmemclr`。
 
+删除仅仅是将对应的 `slot` 设置为 `empty`，并没有减少内存。
+
+
+
 
 
 # 总结
 
-总结一下，`Go` 语言中，通过哈希查找表实现 `map`，用链表法解决哈希冲突。
+总结一下，`Go` 语言中，通过哈希查找表实现 `map`，用链表法解决哈希冲突。利用将 8个 `key` / 8个`value` 依次防止的做饭减少了对齐所需的空间。
 
-通过 `key` 的哈希值将 `key` 散落到不同的桶中，每个桶中有 `8` 个 `cell`。哈希值的低位决定桶序号，高位标识同一个桶中的不同 `key`。
+通过 `key` 的哈希值将 `key` 散落到不同的桶中。比如说有 `2^5=32` 个桶，就用哈希值的低 `5` 位判断落入哪个桶。
 
-当向桶中添加了很多 `key`，造成元素过多，或者溢出桶太多，就会触发扩容。扩容分为等量扩容和 `2` 倍容量扩容。
+当向桶中添加了很多 `key`，造成元素过多（每个桶内的元素数超过 `6.5`），或者溢出桶太多（溢出桶数量超过桶数量），就会触发扩容。
 
-扩容过程是渐进的，主要是防止一次扩容需要搬迁的 `key` 数量过多，引发性能问题。触发扩容的时机是增加了新元素，`bucket` 搬迁的时机则发生在赋值/删除期间，每次最多搬迁两个 `bucket`。
+- 对前一种情况，加桶的个数就可以了，对应的是 `2` 倍容量的 **增量扩容**，扩容期间需要 `rehash` 重新分桶。
+- 后者是由于大量写入和删除元素造成的数据空洞，只需要重新整理下溢出桶里的数据就可以，称为 **等量扩容**。
+
+扩容过程是渐进的，主要是防止一次扩容需要搬迁的 `key` 数量过多，引发性能问题。触发扩容的时机是增加了新元素，搬迁的时机则发生在赋值/删除期间，每次最多搬迁两个 `bucket`（这里存疑，代码里只看到一个）。
 
 
 
@@ -374,4 +449,6 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 #### 参考
 
 > [Stefno - 深度解密Go语言之 map](https://zhuanlan.zhihu.com/p/66676224)
+>
+> [健 の 随笔 - 你不知道的Golang map](https://www.cnblogs.com/sunsky303/p/11815172.html)
 
