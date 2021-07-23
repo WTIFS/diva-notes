@@ -103,6 +103,8 @@ order by pg_relation_size(indexrelid) desc
 
 
 
+# DDL
+
 ##### 索引重命名
 
 ```sql
@@ -158,14 +160,6 @@ pg_dump -h localhost  -p 5432 -U postgres -n yay -s $table -t $table > txt/$tabl
 
 
 
-##### 列转行
-
-```sql
-select array(select column from table);
-```
-
-
-
 ##### 清理空间
 
 ```sql
@@ -177,34 +171,7 @@ vacuum full (锁全表，清理的更深度，归还磁盘空间)
 
 ##### 设置pg_xlog大小
 
-修改postgres.conf 里 wal开头的东西
-
-
-
-##### 联表更新
-
-```sql
-UPDATE table1 SET xxx FROM table2 WHERE table1 关联 table2
-```
-
-
-
-##### 排序
-
-```sql
-RANK() OVER(PARTITION BY f1 ORDER BY f2 DESC)
-```
-
-
-
-##### 提取时间差
-```sql
--- 提取秒
-extract(EPOCH from (a.created_time-b.click_time))
-
--- 提取日期
-date_part('day' from (a.created_time-b.click_time))
-```
+修改 `postgres.conf` 里 `wal` 开头的东西
 
 
 
@@ -337,5 +304,58 @@ where option can be:
 
 ```
 SELECT setval('xxx_id_seq', (SELECT max(id) FROM xxx));
+```
+
+
+
+# DML
+
+##### 列转行
+
+```sql
+select array(select column from table);
+```
+
+
+
+##### 联表更新
+
+```sql
+UPDATE table1 SET xxx FROM table2 WHERE table1 关联 table2
+```
+
+
+
+##### 排序
+
+```sql
+RANK() OVER(PARTITION BY f1 ORDER BY f2 DESC)
+```
+
+
+
+##### 提取时间差
+```sql
+-- 提取秒
+extract(EPOCH from (a.created_time-b.click_time))
+
+-- 提取日期
+date_part('day' from (a.created_time-b.click_time))
+```
+
+
+
+##### 字符串拼接
+
+```sql
+SELECT concat(a, b, c) FROM table WHERE xxx;
+```
+
+
+
+##### 字符串替换
+
+```sql
+SELECT replace(column, old, new) FROM table WHERE xxx;
 ```
 
