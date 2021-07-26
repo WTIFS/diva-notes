@@ -35,17 +35,21 @@
 
 Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`。
 
-**G**：代表一个 `goroutine`。
+**G**：代表一个 `goroutine`。不过 `G` 并非执行体，它仅保存并发任务的状态，用自己独立的栈存放当前的运行内存及状态。
 
-- 每个 `goroutine` 都有自己独立的栈存放当前的运行内存及状态。可以把一个 `G` 当做一个任务，当 `goroutine` 被调离 CPU 时，调度器代码负责把 CPU 寄存器的值保存在 `G` 对象的成员变量之中。当 `goroutine` 被调度起来运行时，调度器代码又负责把 G 对象的成员变量所保存的寄存器的值恢复到 CPU 的寄存器。
+- 当 `G` 被调离 CPU 时，调度器代码负责把 CPU 寄存器的值保存在 `G` 对象的成员变量之中。当 `G` 被调度起来运行时，调度器代码又负责把 `G` 对象的成员变量所保存的寄存器的值恢复到 CPU 的寄存器。`G` 创建后被放置在 `P` 本地队列或全局队列，等待工作线程调度执行。
 
-**M**：表示内核线程。它本身与一个内核线程进行绑定，每个工作线程都有唯一的一个 `M` 结构体的实例对象与之对应。
+**M**：表示系统线程。它本身与一个内核线程进行绑定，是实际的执行体。
 
-- M 结构体对象除了记录着工作线程的诸如栈的起止位置、当前正在执行的Goroutine 以及是否空闲等等状态信息之外，还通过指针维持着与 P 结构体的实例对象之间的绑定关系。
+- 它和 `P` 绑定，以循环调度方式不断从 `P` 里取 `G` 并执行。
 
-**P**：代表一个虚拟的处理器，它维护了一个本地可运行 `G` 队列，工作线程优先从这个队列里找 `G` 运行，提高了工作线程的并发性。每个 G 要想真正运行起来，首先需要被分配一个 P。
+**P**：代表一个虚拟的处理器，作用类似 `CPU` 核，用来控制可同时并发执行的任务数。
 
-除了上面三个结构体以外，还有一个存放所有可运行 `goroutine` 的容器 `schedt`。每个 Go 程序中 `schedt` 结构体只有一个实例对象，在代码中是一个共享的全局变量，每个工作线程都可以访问它以及它所拥有的 `goroutine` 运行队列。
+- 每个工作线程都必须绑定一个 `P` 才被允许执行任务，否则只能休眠，直到有空闲 `P` 时被唤醒。它还为线程执行提供资源，如内存 (`mcache`)、`G` 队列 (`local runq`) 等。线程独享绑定的 `P` 资源，可在无锁状态下执行高效操作。
+
+除了上面三个结构体以外，还有一个存放所有可运行 `goroutine` 的容器 `schedt`。每个 `Go` 程序中 `schedt` 结构体只有一个实例对象，在代码中是一个共享的全局变量，每个工作线程都可以访问它以及它所拥有的 `goroutine` 运行队列。
+
+另外，尽管 `P/M` 构成执行组合体，但两者数量并非一一对应。 `P` 的数量默认为 `CPU` 数，而 `M` 是由调度器按需创建的。比如，当 `M` 因陷入系统调用阻塞时，`P` 就会被监控线程抢回，去新建/唤醒一个 `M` 执行其他任务，这样 `M` 的数量就会增长。
 
 
 
@@ -86,11 +90,14 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 - `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
 - `G` 并非执行体，它仅仅保存并发任务状态，为任务提供所需要的栈空间
 - `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
+- `G` 使用完毕后会放在 `sched` 的 `gFree` 列表里，等待复用。
+    - 因此存在 如果瞬发新建了大量 `G`，高峰后这些 `G` 会一直留着，不释放内存的问题。
 
 ```go
 // runtime/runtime2.go
 type g struct {
     stack       stack      // 当前 Goroutine 的栈内存范围 [stack.lo, stack.hi) 
+    stackguard0 uintptr    // 一个警戒指针，用来判断栈容量是否需要扩张
     m           *m         // 当前 Goroutine 绑定的 M
     sched       gobuf      // 调度相关的数据，上下文切换时就更新这个
     preempt     bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
@@ -113,7 +120,7 @@ type g struct {
 - `M` 是一个很大的结构，里面维护小对象内存 `cache`、当前执行的`goroutine`、随机数发生器等等非常多的信息。
 - `M` 的数量目前最多10000个
 - `M` 通过修改寄存器，将执行栈指向 `G` 自带的栈内存，并在此空间内分配堆栈帧，执行任务函数
-- 中途切换时，将寄存器值保存回 `G` 的 `sched` 字段即可记录状态，任何 `M` 都可以通过读这个 `G` 的该字段来恢复该 `G `的状态。线程 `M` 本身只负责执行，不保存状态。这是并发任务跨线程调度，实现多路复用的根本所在
+- 中途切换时，将寄存器值保存回 `G` 的 `sched` 字段即可记录状态，任何 `M` 都可以通过读这个 `G` 的该字段来恢复该 `G `的状态。线程 `M` 本身只负责执行，不保存状态。这是并发任务跨线程调度，实现多路复用的根本所在。
 
 ```go
 type m struct {
@@ -147,7 +154,7 @@ type m struct {
 
 ## P (Processor)，处理器
 - `P` 是线程 `M` 和 `G` 的中间层，用于调度 `G` 在 `M` 上执行。
-- `P` 自身是用一个全局数组 (长度255) 来保存的，放在 `schedt` 结构体里
+- `P` 自身是用一个全局数组 `allp` 来保存的，长度默认为 `GOMAXPROCS`
 - 它的主要用途就是用来执行 `goroutine` 的，所以它维护了一个本地 `G` 队列，里面存储了所有需要它来执行的 `goroutine`。
   - 本地队列避免了竞争锁（解决了初代模型最大的问题）。
 - `P` 为线程提供了执行资源，如对象分配内存，本地任务队列等。线程独享 `P` 资源，可以无锁操作
@@ -155,6 +162,7 @@ type m struct {
 - `P` 控制了程序的并行度。可以通过 `GOMAXPROCS` 设置 `P` 的个数，最多只能有 `GOMAXPROCS` 个线程能并行，一般设为 CPU 核数
 
 ```go
+// runtime.runtime2.go
 type p struct {
     m           muintptr    // 挂载的 M
      
@@ -165,6 +173,10 @@ type p struct {
     runqtail uint32         // 队尾
     runnext guintptr        // 缓存可立即执行的 G
 }
+
+var (
+    allp []*p               // 全局 P 数组
+)
 ```
 
 
@@ -173,6 +185,7 @@ type p struct {
 
 - `Schedt` 结构就是调度器，它维护有存储 `M` 和 `G `的队列以及调度器的一些状态信息等。
 - 它是一个共享的全局变量，全局只有一个 `schedt` 类型的实例。
+- 里面存放了空闲（即休眠） `M` 列表、空闲 `P` 列表、全局 `G` 队列、废弃的 `G` 队列
 
 ```go
 type schedt struct {
@@ -185,12 +198,18 @@ type schedt struct {
     maxmcount    int32     // M 的最大数量，初始化时设为 10000，即最多 10000 个 M
     nmspinning uint32      // 处于自旋状态的 M 的数量
 
-    pidle      puintptr    // 空闲 p 链表
-    npidle     uint32      // 空闲 p 数量
+    pidle      puintptr    // 空闲 P 列表
+    npidle     uint32      // 空闲 P 数量
     
     runq     gQueue        // 全局 runnable G 队列
     runqsize int32         // 全局 G 队列的长度
    
+  	gFree struct {		     // 有效 dead G 的全局缓存. 新建 goroutine 时，优先从这里复用
+				lock    mutex
+				stack   gList	     // 包含栈的 Gs
+				noStack gList	     // 没有栈的 Gs
+				n       int32
+		}
     
     sudoglock  mutex       // sudog 结构的集中缓存
     sudogcache *sudog 
@@ -208,36 +227,43 @@ type schedt struct {
 
 ## 程序启动
 - 调度器初始化 `runtime.schedinit`
-    - `schedinit` 函数主要根据用户设置的 `GOMAXPROCS` 值来创建一批 `P`，不管 `GOMAXPROCS` 设置为多大，最多也只能创建 256 个 `P`。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
+    - `schedinit` 函数主要会创建一批 `P`，数量默认为 `CPU` 数。如果用户设置了 `GOMAXPROCS` 环境变量，则 `P` 的数量为 `max(GOMAXPROCS, 256)`，也就是最多 `256`。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
 - 调用 `runtime.newproc` 创建出第一个 `goroutine`，这个 `goroutine` 将执行的函数是 `runtime.main`
-- 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 "hello, world" 就是完全跑在这个 `goroutine` 里
+    - 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 "hello, world" 就是完全跑在这个 `goroutine` 里
 - 主 `goroutine` 开始执行后，做的第一件事情是创建了一个新的内核线程 `M`: 系统监控 `sysmon`
-- `sysmon` 用来检测长时间（超过 10 ms）运行的 `goroutine`，将其调度到全局队列。这个队列的优先级比较低
+    - `sysmon` 用来检测长时间（超过 10 ms）运行的 `goroutine`，将其调度到全局队列。这个队列的优先级比较低
 - 此外还会启动垃圾回收、运行用户代码的 `gouroutine`
-- go 程序启动后，会给每个逻辑核心分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些内核线程仍然由 OS scheduler 来调度。
+- 程序启动后，会给每个逻辑核心分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些内核线程仍然由 OS scheduler 来调度。
 
 
 
-## 创建 goroutine
+
+
+## 创建G
 - 使用 `go func()` 关键字时，会调用 `newproc`，创建新的 `goroutine`
+    - 也不一定是创建，实际会尝试复用
+    - 先从 `P` 的 `gfree` 字段取空闲 `G`，没有再从 `sched.gfree` 链表里转移一批空闲 `G` 到 `P` 里，再重试
+    - 再没有，才会新建
 - 新的 `goroutine` 会被加到本地队列里
   - 通过 `go` 关键字新建的协程，会被放到本地队列的头部
-  - 到了调度的点后，会从队列里 `pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
-- `P` 的本地队列长度超过 64 时，里面一半的 `G` 会被转移至全局队列
-- `findrunnable`，见下
+  - 调度时，会从队列里 `pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
+- `P` 的本地队列长度超过 `64` 时，里面一半的 `G` 会被转移至全局队列
+- 任务队列分为三级，分别是 `P.runnext`, `P.runq`, `Sched.runq`，很有些 CPU 多级缓存的意思。
 
 ```go
 // 创建新的 G
 func newproc(siz int32, fn *funcval) {
-    
     gp := getg()        // 获取当前的 G 
     pc := getcallerpc() // 获取调用者的程序计数器 PC
   
-    systemstack(func() {
-       
+    systemstack(func() {                         // 系统调用
         newg := newproc1(fn, argp, siz, gp, pc)  // 创建新的 G 结构体
         _p_ := getg().m.p.ptr()   
         runqput(_p_, newg, true)                 // 将 G 加入到 P 的运行队列
+      
+      	if mainStarted {
+						wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
+				}
     })
 }
 ```
@@ -252,10 +278,10 @@ func newproc(siz int32, fn *funcval) {
 // 只能由 owner P 执行
 // 另外可以看到由于使用了 P, 整个函数是无锁的
 func runqput(_p_ *p, gp *g, next bool) {
-    if next {
+    if next {                                                  // 新建G时，next为true，G会直接写入 runnext 字段
         oldnext := _p_.runnext
         _p_.runnext.cas(oldnext, guintptr(unsafe.Pointer(gp))) // 直接写入 runnext 字段
-        gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到全局队列
+        gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到本地队列
     }
     
     h := atomic.LoadAcq(&_p_.runqhead)            // 队头
@@ -265,22 +291,21 @@ func runqput(_p_ *p, gp *g, next bool) {
         atomic.StoreRel(&_p_.runqtail, t+1)       // 更新队尾指针
         return
     }
-    if runqputslow(_p_, gp, h, t) { // 如果本地队列满了，分一半到全局队列
+    if runqputslow(_p_, gp, h, t) { // 如果本地队列满了，分一半到全局队列。因为需要加锁，所以slow
         return
     }
 }
 
-// 移动本地队列的前半部分，到全局队列
+// 移动本地队列的前半部分，到全局队列。因为需要加锁，所以slow
 func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
     var batch [len(_p_.runq)/2 + 1]*g
 
-    // First, grab a batch from local queue.
     n := t - h
     n = n / 2
     for i := uint32(0); i < n; i++ {
         batch[i] = _p_.runq[(h+i)%uint32(len(_p_.runq))].ptr() // 把本地队列的前半部分到 batch 数组
     }
-    if !atomic.CasRel(&_p_.runqhead, h, h+n) { // 更新本地队列的头指针，即删除本地队列的前半部分
+    if !atomic.CasRel(&_p_.runqhead, h, h+n) {                 // 更新本地队列的头指针，即删除本地队列的前半部分
         return false
     }
     
@@ -300,34 +325,121 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 
 
 
+## 创建M
+
+在 `newproc` 里可以看到一个 `wakep()` 函数，作用是唤醒空闲 `M` 执行空闲 `P`，如果有空闲 `P` 但没有空闲 `M`，就会新建一个 `M`。
+
+`M` 一旦被创建，就不再会被销毁了，最多是休眠，放入 `sched` 的空闲 `M` 列表里。
+
+```go
+// runtime/proc.go
+// 唤醒一个空闲 M 执行空闲 P
+func wakep() {
+	  if atomic.Load(&sched.npidle) == 0 {                                            // 如果没有空闲P就返回
+		    return
+  	}
+	  if atomic.Load(&sched.nmspinning) != 0 || !atomic.Cas(&sched.nmspinning, 0, 1) { // 设为自旋状态，防止并发唤醒
+		    return
+  	}
+	  startm(nil, true) // 找空闲 M，或者新建一个 M
+}
+
+// 获取空闲 M 或新建 M
+func startm(_p_ *p, spinning bool) {
+  	nmp := mget()          // 获取空闲 M
+		if nmp == nil {        // 没有空闲 M，新建一个
+        id := mReserveID() // sched.mnext 字段记录了 M 的自增 ID；如果超出 sched.maxmcount(默认10000)，会 panic
+				newm(fn, _p_, id)
+				return
+		}
+}
+
+// 新建一个M
+func newm(fn func(), _p_ *p, id int64) {
+  	mp := allocm(_p_, fn, id) // 创建 M 对象
+  	newm1(mp)
+}
+
+// 创建M对象、分配空间、初始化
+func allocm(_p_ *p, fn func(), id int64) *m {
+    mp := new(m)        // 创建M对象 
+  	mp.mstartfn = fn    // 设置启动函数
+	  mcommoninit(mp, id) // 初始化
+  
+		mp.g0 = malg(8192 * sys.StackGuardMultiplier)
+    mp.g0.m = mp
+}
+
+// 为M创建系统线程
+func newm1(mp *m) {
+  	newosproc(mp)             // 创建系统线程
+}
+
+// runtime.os_linux.go
+// 这个函数根据具体os的实现是不一样的，linux下用的是clone()，macOS下用的就是pthread_create
+// 初始 func 是 mstart，mstart() 会触发调度 schedule()
+func newosproc(mp *m) {
+  	ret := clone(cloneFlags, stk, unsafe.Pointer(mp), unsafe.Pointer(mp.g0), unsafe.Pointer(funcPC(mstart)))
+}
+```
+
+`M` 比较特别的地方是自带一个名为 `g0`，默认 `8KB` 栈内存的 `G` 属性对象。它的栈内存地址被传给 `clone` 函数，作为系统线程的默认堆栈空间（Linux下）。
+
+通过它，`M` 可以无 `P` 执行 `runtime` 管理指令，比如 `systemstack` 这种执行方式。
+
+在进程执行过程中，有两类代码需要运行。
+
+- 一类是用户逻辑，直接使用当前 `G` 的栈内存
+- 另一类是运行时管理指令，它并不便于直接在用户栈上执行，因为涉及到切换，需要保存用户栈、执行自己的逻辑、再恢复用户栈，要处理与用户逻辑现场有关的一大堆事务，很麻烦。
+
+因此，当需要执行管理指令时，会将线程栈临时切换到 `g0`，与用户逻辑彻底隔离。
 
 
-## 调度 schedule()
 
-1. 调度器每调度 61 次，从全局队列里取一次 `G`，以避免饥饿
+## 调度 schedule
+
+1. 调度器每调度 `61` 次，从全局队列里取一次 `G`，以避免饥饿
 2. 调用 `runqget` 从 `P` 本地的运行队列中查找待执行的 `G`
 3. `findrunnable` ，依次从本地、全局、netpoll、偷窃里取 `G`
     - 再次从 `local runq` 获取 `G`
     - 去 `global runq` 获取（因为前面仅仅是1/61的概率）
     - 执行 `netpoll`，检查是否有 `IO` 就绪的 `G`
-    - 如果还是没有，那么随机选择一个 `P`，偷其 `runqueue` 里的一半。（这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到）
+    - 如果还是没有，那么随机选择一个 `P`，偷其 `runqueue` 里的一半。
+        - 这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到
     - 偷窃前会将 `M` 的自旋状态设为 `true`，偷窃后再改回去
     - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身休眠（放回`M`池子）
-
 4. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的`P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime`会新建一个`M`。
-
 5. `execute`，执行代码。
+
+
+
+#### schedule
 
 ```go
 // runtime/proc.go
 // 找出一个 G 来执行
 func schedule() {
 
+// STW检查
+top:
+  	if sched.gcwaiting != 0 {
+				gcstopm()
+				goto top
+		}
+
+  	// 检查定时器
+  	checkTimers(pp, 0)
+  
+    // 进入 GC MarkWorker 工作模式
+  	if gp == nil && gcBlackenEnabled != 0 {
+				gp = gcController.findRunnableGCWorker(_g_.m.p.ptr())
+				if gp != nil {
+						tryWakeP = true
+				}
+		}
+  
     // 每 tick 61次，从全局队列里取 G
     if gp == nil {
-        // Check the global runnable queue once in a while to ensure fairness.
-        // Otherwise two goroutines can completely occupy the local runqueue
-        // by constantly respawning each other.
         if _g_.m.p.ptr().schedtick%61 == 0 && sched.runqsize > 0 {
             lock(&sched.lock)
             gp = globrunqget(_g_.m.p.ptr(), 1)
@@ -335,34 +447,29 @@ func schedule() {
         }
     }
 
-    // 从本地队列里取 G
+    // 从本地队列里取 G，优先使用 P.runnext 字段
     if gp == nil {
         gp, inheritTime = runqget(_g_.m.p.ptr())
     }
     
-    // 通过 findrunnable 寻找可执行 G
+    // 通过 findrunnable 从其他可能得地方寻找可执行 G
     if gp == nil {
         gp, inheritTime = findrunnable() // blocks until work is available
     }
     
-    // Poll network. 这一步只是优化，跳过影响也不大
-    if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
-        // 跳过
-    }
-
-    // 从其他 P 偷窃
-    for i := 0; i < 4; i++ {
-        // 这里的随机用到了一种质数算法，保证既随机，每个P又都能被访问到
-        for enum := stealOrder.start(fastrand()); !enum.done(); enum.next() {
-            stealRunNextG := i > 2 // first look for ready queues with more than 1 g
-            p2 := allp[enum.position()]
-            if gp := runqsteal(_p_, p2, stealRunNextG); gp != nil {
-                return gp, false
-            }
-        }
-    }   
+  
+    // 执行任务函数
+		execute(gp, inheritTime)
 }
+```
 
+
+
+#### findrunnable
+
+依次从 本地队列、全局队列、netpoll、其他 `P` 获取可运行的 `G`。偷窃优先级最低，因为会影响其他 `P` 执行（需要原子操作）。
+
+```go
 // 寻找可执行的 G
 // Tries to steal from other P's, get g from local or global queue, poll network.
 func findrunnable() (gp *g, inheritTime bool) {
@@ -383,30 +490,56 @@ func findrunnable() (gp *g, inheritTime bool) {
             return gp, false
         }
     }
+  
+    // Poll network. 这一步只是优化，跳过影响也不大
+    if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
+        // 跳过
+    }
 
+    // 从其他 P 偷窃
+    for i := 0; i < 4; i++ {
+        // 这里的随机用到了一种质数算法，保证既随机，每个P又都能被访问到
+        for enum := stealOrder.start(fastrand()); !enum.done(); enum.next() {
+            stealRunNextG := i > 2 // first look for ready queues with more than 1 g
+            p2 := allp[enum.position()]
+            if gp := runqsteal(_p_, p2, stealRunNextG); gp != nil {
+                return gp, false
+            }
+        }
+    } 
 }
+```
 
+
+
+#### globrunqget
+
+在检查全局队列时，除返回一个可用 `G` 外，还会批量转移一批`G` 到 `P` 的本地队列。毕竟不能每次加锁去操作全局队列。
+
+```go
 // 从全局队列列取 G
-// 另外还会分一部分 G 给 P
+// 另外还会分一部分 G 给 P（分的 G 个数为 Min（全局队列长度/P个，或者P本地队列/2））
 func globrunqget(_p_ *p, max int32) *g {
     if sched.runqsize == 0 {
         return nil
     }
 
-    // n取 全局队列长度 / P本地队列长度/2 的最小值
+    // 分给 P 的 G 个数为（全局队列长度/P个数，P本地队列长度/2，二者最小值）
+    // 将全局队列按 P 个数等分
     n := sched.runqsize/gomaxprocs + 1
     if n > sched.runqsize {
         n = sched.runqsize
     }
+    // 不能超过 runq 数组长度的一半
     if n > int32(len(_p_.runq))/2 {
         n = int32(len(_p_.runq)) / 2
     }
 
-    sched.runqsize -= n
+    sched.runqsize -= n    // 调整计数
 
     gp := sched.runq.pop() // 从全局队列头部弹出 G
     n--
-    for ; n > 0; n-- {     // 分一部分 G 到当前P的本地队列
+    for ; n > 0; n-- {     // 分 n 个 G 到当前 P 的本地队列
         gp1 := sched.runq.pop()
         runqput(_p_, gp1, false)
     }
@@ -420,6 +553,7 @@ func globrunqget(_p_ *p, max int32) *g {
 
 ## 调度时机
 
+- 新建 `M` 后，`mstart` 里触发 `schedule`
 - 阻塞性系统调用，比如文件 IO，网络IO
   - Golang 重写了所有系统调用，在系统调用里加入了调度逻辑（更改 `G`状态、`M` 和`P` 解绑、 `schedule `等）
 - time系列定时操作
