@@ -163,6 +163,25 @@ func deferreturn(arg0 uintptr) {
 
 
 
+# panic
+
+顺带一提，`panic` 的实现和 `defer` 息息相关，也写在这里。
+
+先来看 `G` 的结构。`G` 的字段里分别有两个链表，储存 `panic` 和 `defer` 删除
+
+```go
+type g struct {
+    _panic       *_panic   // panic链表
+	_defer       *_defer   // defer链表
+}
+```
+
+编译器将 `panic` 翻译成 `gopanic` 函数调用。它会将错误信息打包成 `_panic` 对象，并挂到 `G._panic` 链表的头部。然后遍历 `G._defer` 链表，检查是否有 `recover`。如被 `recover`，则终止遍历执行，跳转到正常的 `deferreturn` 环节；否则终止进程。
+
+
+
+
+
 #### 参考
 
 > [深入理解defer（下）defer实现机制](https://zhuanlan.zhihu.com/p/69455275)

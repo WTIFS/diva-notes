@@ -3,11 +3,11 @@
 
 > 不要通过共享内存来通信，而应该通过通信来共享内存
 
-这句话是一条编程指导建议，和golang本身关系不大。
+这句话是一条编程指导建议，和 golang 本身关系不大。
 
 
 
-####共享内存
+#### 共享内存
 
 如果在一个系统中，两个线程或进程，都可以读写同一块内存空间，这就叫做"内存共享"。直觉上会觉得这种方式非常方便。
 
@@ -69,14 +69,98 @@ type waitq struct {
 
 1. 锁定整个通道结构
 2. 如果 `recvq` 中有等待读的 `goroutine`，则直接将元素写入该 `goroutine` (取出G、写入G、唤醒G)
-    1. 这步节省了一个锁和内存copy的步骤。一般共享内存是：G1加锁、G1写入内存、G1解锁；G2加锁、G2读内存、G2解锁
+    1. 这步节省了一个锁和内存copy的步骤。一般共享内存是：G1加锁、G1写入堆、G1解锁；G2加锁、G2读堆、G2解锁
     2. 这里直接是：G1加锁、G1写入G2的栈、G1唤醒G2、G1解锁
 3. 如果 `recvq` 为空，则确定缓冲区是否可用，如果可用那么从当前goroutine复制数据到 `buf` 缓冲区中，并增加 `sendx` 下标的值
 4. 如果缓冲区已经满了，则
     1. 要写入的元素将保存在当前执行的 `goroutine` 结构中，let's say `G1`
     2. 调度器将 `G1` 的状态设置为 `waiting`，移除与线程 `M` 的联系。此时 `G1` 就是阻塞状态
-    3. `G1` 变为 `waiting` 状态后，会创建一个代表自己的 `sudog` 的结构，然后放到 `sendq` 链表中。`sudog` 结构中保存了 `channel` 相关的变量的指针
+    3. `G1` 变为 `waiting` 状态后，会创建一个代表自己的 `sudog` 的结构，将数据保存到 `sudog.elem` 字段，然后放到 `sendq` 链表中
 5. 写入完成释放锁
+
+```go
+// runtime/chan.go
+// 注意这里的 block 并非表示 channel 是阻塞/非阻塞的，而是表示是否通过 select: case chan <- data 的方式来访问
+func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
+    if c == nil {                                      // select 模式下空 channel 直接返回；否则报错
+		if !block {
+			return false
+		}
+		gopark(nil, nil, waitReasonChanSendNilChan, traceEvGoStop, 2)
+		throw("unreachable")
+	}
+    
+    if !block && c.closed == 0 && full(c) {            // 快速返回：select 模式下 channel 写满时直接返回 false
+		return false
+	}
+
+	lock(&c.lock)
+
+	if sg := c.recvq.dequeue(); sg != nil {            // 如果等待队列里有等待的读者，直接把数据写到它的栈里
+		send(c, sg, ep, func() { unlock(&c.lock) }, 3) // send 里面使用了 memmove 将数据复制给接收者
+		return true
+	}
+
+    // buffer 还有空间
+	if c.qcount < c.dataqsiz {
+		qp := chanbuf(c, c.sendx)
+		typedmemmove(c.elemtype, qp, ep)
+		c.sendx++
+		if c.sendx == c.dataqsiz {
+			c.sendx = 0
+		}
+		c.qcount++
+		unlock(&c.lock)
+		return true
+	}
+
+    // buffer 没有空间了，非阻塞模式下直接返回
+	if !block {
+		unlock(&c.lock)
+		return false
+	}
+
+	// 同步模式
+	gp := getg()
+	mysg := acquireSudog() // 复用或新建一个 sudog
+	mysg.releasetime = 0
+
+	mysg.elem = ep         // 保存发送的数据
+	mysg.g = gp            
+	mysg.c = c
+	c.sendq.enqueue(mysg)  // 将 sudog 放入发送者队列
+    
+    // 陷入休眠
+	gopark(chanparkcommit, unsafe.Pointer(&c.lock), waitReasonChanSend, traceEvGoBlockSend, 2) 
+
+    // 到这里，说明休眠结束，有读者把数据读走了
+    
+    KeepAlive(ep) // 里面其实是 println(ep)，用来保证读者读数据前，数据不被 GC 掉
+
+    // 恢复 G 的状态，并将 sudog 放回缓存池
+	gp.waiting = nil
+	gp.activeStackChans = false
+	gp.param = nil
+	mysg.c = nil
+	releaseSudog(mysg)  // 将 sudog 放回缓存池，下次复用
+
+	return true
+}
+
+func send(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
+	if sg.elem != nil {
+		sendDirect(c.elemtype, sg, ep) // 使用了 memmove 将数据复制给接收者
+		sg.elem = nil
+	}
+	gp := sg.g
+	unlockf()
+	gp.param = unsafe.Pointer(sg)
+	sg.success = true
+	goready(gp, skip+1)                // 唤醒 gopark 了的接收者
+}
+```
+
+
 
 
 
@@ -95,25 +179,42 @@ type waitq struct {
 
 
 
-### 读取数据的源码
-
 ```go
-//从channel中读取数据
+// 读取的源码和写入其实大同小异
 func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool) {
-    if !block && empty(c) {
-        //判断channel是否已经close，是则直接返回
+    if c == nil {          // select 模式下空 channel 直接返回；否则报错
+		if !block {
+			return
+		}
+		gopark(nil, nil, waitReasonChanReceiveNilChan, traceEvGoStop, 2)
+		throw("unreachable")
+	}
+    
+    if !block && empty(c) { // 快速返回：select 模式下 channel 为空时直接返回 false
         if atomic.Load(&c.closed) == 0 {
 			return
 		}
+        if empty(c) {       // 还做了 double check
+            return true, false
+        }
     }
     
     //加锁
     lock(&c.lock)
     
+    // channel 关闭了，返回一个类型默认的零值
+    if c.closed != 0 && c.qcount == 0 { 
+		unlock(&c.lock)
+		if ep != nil {
+			typedmemclr(c.elemtype, ep) // 返回 ep 类型默认的零值
+		}
+		return true, false
+	}
+
     if sg := c.sendq.dequeue(); sg != nil {
-        //如果sendq中有等待写的goroutine，则判断buffer。
-        //如果buffer为空，直接从sender的栈中读数据
-        //否则从buffer头部读数据，将sender的数据放入buffer队尾
+        // 如果 sendq 中有等待写的 goroutine，则判断 buffer。
+        //   如果 buffer 为空，直接从 sender 的栈中读数据
+        //   否则从 buffer 头部读数据，将 sender 的数据放入 buffer 队尾
 		recv(c, sg, ep, func() { unlock(&c.lock) }, 3)
 		return true, true
 	}
@@ -131,26 +232,122 @@ func chanrecv(c *hchan, ep unsafe.Pointer, block bool) (selected, received bool)
 		return true, true
 	}
     
-    //没有buffer了，将g放入recvq并阻塞
+    // 没有buffer了，将 g 放入 recvq 并阻塞
     // no sender available: block on this channel.
 	mysg := acquireSudog()
   	c.recvq.enqueue(mysg)
+}
+
+// 从 sendq 里读数据
+func recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
+    // 如果 buffer 为空，直接从 sendq 里的 sg 复制元素到 ep
+	if c.dataqsiz == 0 {
+		if ep != nil {
+			recvDirect(c.elemtype, sg, ep)
+		}
+    // 如果 buffer 不为空，那么 buffer 一定是满的
+	} else {
+		qp := chanbuf(c, c.recvx)             // 取出 buffer 的头部元素，复制到 ep
+		if ep != nil {
+			typedmemmove(c.elemtype, ep, qp)
+		}
+		typedmemmove(c.elemtype, qp, sg.elem) // 再把 sg 的值复制回头部那个元素
+		c.recvx++                             // 这里很 tricky，没有用弹出头部、再插入队尾的做法
+		if c.recvx == c.dataqsiz {            // 而是直接原地更新头部元素值
+			c.recvx = 0                       // 由于 buffer 是个环形队列，因此更新队尾偏移量就可以了
+		}
+		c.sendx = c.recvx                     // 也更新 buffer 的写入偏移量
+	}
+	sg.elem = nil
+	gp := sg.g
+	unlockf()
+	gp.param = unsafe.Pointer(sg)
+	sg.success = true
+	goready(gp, skip+1)                       // 唤醒gopark 状态下的 sudog
 }
 ```
 
 
 
-## 产生阻塞的情况
+#### close
 
-1. 读空 `channel`
-2. 写非缓冲 `channel` / 写入数据超过缓冲区 
+关闭操作将所有排队者唤醒，并设置 `closed`、`param` 字段。
+
+```go
+func closechan(c *hchan) {
+	if c == nil {
+		panic(plainError("close of nil channel"))
+	}
+
+	lock(&c.lock)
+	if c.closed != 0 {
+		unlock(&c.lock)
+		panic(plainError("close of closed channel"))
+	}
+
+	if raceenabled {
+		callerpc := getcallerpc()
+		racewritepc(c.raceaddr(), callerpc, funcPC(closechan))
+		racerelease(c.raceaddr())
+	}
+
+	c.closed = 1
+
+	var glist gList
+
+	// 释放所有接收者
+	for {
+		sg := c.recvq.dequeue()
+		if sg == nil {
+			break
+		}
+		if sg.elem != nil {
+			typedmemclr(c.elemtype, sg.elem)
+			sg.elem = nil
+		}
+		gp := sg.g
+		gp.param = unsafe.Pointer(sg) // 这个参数表名唤醒者是 closechan
+		sg.success = false
+		glist.push(gp)
+	}
+
+	// 释放所有发送者（发送者继续发送会panic）
+	for {
+		sg := c.sendq.dequeue()
+        // 和上面一样
+        ...
+	}
+	unlock(&c.lock)
+
+	// 唤醒所有 G
+	for !glist.empty() {
+		gp := glist.pop()
+		gp.schedlink = 0
+		goready(gp, 3)
+	}
+}
+```
+
+
+
+
+
+
+
+## 产生阻塞/panic的情况
+
+以下均不考虑 `select: case <- chan` 的情况
+
+1. 读空的 `channel`
+2. 写阻塞 `channel` / 写入数据超过缓冲区 
 3. 向关闭的 `channel` 写数据（`panic: send on closed channel`）
+4. 读写 `nil channel`
 
 
 
 ## 样例
 
-读空channel，阻塞
+读空 `channel`，阻塞
 ```go
 t := make(chan int)
 x, ok := <- t //阻塞在这里。主线程被放进t的recvq了，然后主线程被挂起，等待t写入后唤醒主线程
@@ -158,7 +355,7 @@ x, ok := <- t //阻塞在这里。主线程被放进t的recvq了，然后主线�
 
 
 
-读已关闭的channel，正常执行
+读已关闭的 `channel`，正常执行
 
 ```go
 t := make(chan int)
@@ -168,7 +365,7 @@ x, ok := <- t //0, false
 
 
 
-写channel，阻塞
+写阻塞 `channel`，阻塞
 
 ```go
 t := make(chan int)

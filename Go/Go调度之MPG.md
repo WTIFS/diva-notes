@@ -101,16 +101,27 @@ type g struct {
     m           *m         // 当前 Goroutine 绑定的 M
     sched       gobuf      // 调度相关的数据，上下文切换时就更新这个
     preempt     bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
-	  timer       *timer     // 给 time.Sleep 用的 timer
+	timer       *timer     // 给 time.Sleep 用的 timer
   
   	_panic       *_panic   // panic链表
-	  _defer       *_defer   // defer链表
+	_defer       *_defer   // defer链表
 }
 ```
 
+
+
 ##### sudog
 
-当 `G` 遇到阻塞 / 需要等待的场景时，（比如向 `channel` 发送/接收内容时），会被封装为 `sudog` 这样一个结构。一个 `G` 可能被封装为多个 `sudog` 分别挂在不同的等待队列上。
+当 `G` 遇到阻塞场景时，（比如向 `channel` 发送/接收内容时），会被封装为 `sudog` 这样一个结构。其实就是给 `G` 加了个 `elem` 字段，用于记录 `channel` 发送的数据。
+
+```go
+type sudog struct {
+    g     *g               // 正常的 G
+    elem  unsafe.Pointer   // 保存数据的指针
+}
+```
+
+
 
 
 
@@ -171,7 +182,15 @@ type p struct {
     runq     [256]guintptr  // 本地可运行的 G 队列，local runqueue
     runqhead uint32         // 队头
     runqtail uint32         // 队尾
-    runnext guintptr        // 缓存可立即执行的 G
+    runnext guintptr        // 下一个可执行 G，优先级比队列高
+    
+	gFree struct {          // Gdead 状态的 G 池。新建 G 时，优先从这里复用，再用 schedt 里的
+		gList
+		n int32
+	}
+
+	sudogcache []*sudog    // sudog 缓存池。二级缓存，优先从这里复用，再用 schedt 里的
+	sudogbuf   [128]*sudog
 }
 
 var (
@@ -204,16 +223,16 @@ type schedt struct {
     runq     gQueue        // 全局 runnable G 队列
     runqsize int32         // 全局 G 队列的长度
    
-  	gFree struct {		     // 有效 dead G 的全局缓存. 新建 goroutine 时，优先从这里复用
-				lock    mutex
-				stack   gList	     // 包含栈的 Gs
-				noStack gList	     // 没有栈的 Gs
-				n       int32
-		}
+  	gFree struct {		     // 有效 dead G 的全局缓存。二级设计，新建 goroutine 时，优先从 P 复用，再从这里
+		lock    mutex
+		stack   gList	     // 包含栈的
+		noStack gList	     // 没有栈的
+		n       int32
+	}
     
-    sudoglock  mutex       // sudog 结构的集中缓存
-    sudogcache *sudog 
-    
+    sudoglock  mutex      
+    sudogcache *sudog      // 全局 sudog 缓存。也是个二级缓存，使用时先用 P 的，再用全局的
+     
     deferlock mutex
     deferpool [5]*_defer   // defer 结构的池
 }
