@@ -98,7 +98,7 @@ func stopTheWorldWithSema() {
 	// 暂停所有 syscall 状态的 P
 	for _, p := range allp {                                      // 遍历全局 P 数组
 		s := p.status
-		if s == _Psyscall && atomic.Cas(&p.status, s, _Pgcstop) { // 起始就是改了下 P 的状态为 gcstop 
+		if s == _Psyscall && atomic.Cas(&p.status, s, _Pgcstop) { // 其实就是改了下 P 的状态为 gcstop 
 			p.syscalltick++
 			sched.stopwait--
 		}

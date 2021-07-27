@@ -401,8 +401,6 @@ func selectnbrecv(elem unsafe.Pointer, c *hchan) (selected, received bool) {
 
 
 
-
-
 ## 产生阻塞/panic的情况
 
 以下均不考虑 `select: case <- chan` 的情况
