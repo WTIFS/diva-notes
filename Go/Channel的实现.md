@@ -269,7 +269,9 @@ func recv(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
 
 
 
-#### close
+
+
+## close
 
 关闭操作将所有排队者唤醒，并设置 `closed`、`param` 字段。
 
@@ -325,6 +327,73 @@ func closechan(c *hchan) {
 		gp.schedlink = 0
 		goready(gp, 3)
 	}
+}
+```
+
+
+
+
+
+## select
+
+对读写 `channel` 的 `<- chan`、`chan ->` 这种写法，编译器会翻译成对函数的调用。
+
+
+
+#### 写
+
+对于 `x := <- c` 这类的阻塞操作，会编译为 `chansend1(c, x)`。对于 `select`，则编译为 `if selectnbsend(c, x) {} else {}` 这种逻辑。
+
+两者底层都调用的 `chansend` 函数，但传的 `block`参数不同。阻塞操作传 `true`，`select` 传 `false`。
+
+这样在使用 `select` 的写法时，管道才能不阻塞的立即返回 `false`，`case` 才能跳过这个 `false`，无阻塞的继续向下判断 `case2`、`case3`。
+
+```go
+// c <- x 
+func chansend1(c *hchan, elem unsafe.Pointer) {
+	chansend(c, elem, true, getcallerpc())
+}
+
+// select case 写法
+// 编译器会将
+//	select {
+//	case c <- v:
+//		... foo
+//	default:
+//		... bar
+//	}
+//
+// 编译为
+//
+//	if selectnbsend(c, v) {
+//		... foo
+//	} else {
+//		... bar
+//	}
+func selectnbsend(c *hchan, elem unsafe.Pointer) (selected bool) {
+	return chansend(c, elem, false, getcallerpc())
+}
+```
+
+
+
+#### 读：
+
+```go
+// x:= <- c 
+func chanrecv1(c *hchan, elem unsafe.Pointer) {
+	chanrecv(c, elem, true)
+}
+
+// x, ok := <- c
+func chanrecv2(c *hchan, elem unsafe.Pointer) (received bool) {
+	_, received = chanrecv(c, elem, true)
+	return
+}
+
+// select case 写法
+func selectnbrecv(elem unsafe.Pointer, c *hchan) (selected, received bool) {
+	return chanrecv(c, elem, false)
 }
 ```
 
