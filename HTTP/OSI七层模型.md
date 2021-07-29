@@ -7,9 +7,9 @@
 | 应用层          | 应用层             | HTTP / FTP / DNS        | 数据格式协议                   |
 | 表示层          |                    |                         |                                |
 | 会话层          |                    | SSL / TLS               |                                |
-| 传输层          | 传输层             | TCP / UDP / SCTP / RTP  | 指定端口，提供连接             |
-| 网络层          | 网际层             | IP / RARP / ICMP / IGMP | 指定IP地址                     |
-| 数据链路层      | 网络接口层         |                         | 指定MAC地址                    |
+| 传输层          | 传输层             | TCP / UDP / SCTP / RTP  | 指定端口，提供连接。这层的数据，叫 Segment             |
+| 网络层          | 网际层             | IP / RARP / ICMP / IGMP | 指定IP地址。这层的数据，叫 Packet                     |
+| 数据链路层      | 网络接口层         | ARP                        | 指定MAC地址。这层的数据，叫 Frame                    |
 | 物理层          |                    |                         | 处理连接网络的硬件部分，如网卡 |
 
 
