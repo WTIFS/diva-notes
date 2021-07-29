@@ -154,12 +154,12 @@ type m struct {
 
 1. 自旋中 `spinning`: `M` 正在从运行队列获取`G`, 这时候 `M` 会拥有一个 `P`
 2. 执行 `go` 代码中:  `M` 正在执行 `go` 代码, 这时候 `M` 会拥有一个 `P`
-3. 执行原生代码中: `M` 正在执行原生代码或者阻塞的 `syscall`, 这时 `M` 并不拥有 `P`（`M` 可以无 `P` 执行原生代码，运行在 `g0` 上）
+3. 执行原生代码中: `M` 正在执行阻塞的 `syscall` 或者 `cgo`, 这时 `M` 并不拥有 `P`（`M` 可以无 `P` 执行原生代码，运行在 `g0` 上）
 4. 休眠中: `M` 发现没有待运行的 `G` 时会进入休眠, 并添加到空闲 `M` 链表中, 这时 `M` 并不拥有 `P`
 
 自旋中 `spinning` 这个状态非常重要, 是否需要唤醒或者创建新的 `M` 取决于当前自旋中的 `M` 的数量。
 
-通常创建一个 `M `的原因是由于没有足够的 `M` 来关联 `P` 并运行其队列里的 `G`。此外运行时系统执行系统监控的时候，或者 `GC` 的时候也会创建 `M`。
+通常创建一个 `M ` 的原因是由于没有足够的 `M` 来关联 `P` 并运行其队列里的 `G`。此外运行时 `sysmon` 时，或者 `GC` 的时候也会创建 `M`。
 
 
 
@@ -258,7 +258,7 @@ type schedt struct {
 
 
 
-## 创建G
+## 创建 G
 - 使用 `go func()` 关键字时，会调用 `newproc`，创建新的 `goroutine`
     - 也不一定是创建，实际会尝试复用
     - 先从 `P` 的 `gfree` 字段取空闲 `G`，没有再从 `sched.gfree` 链表里转移一批空闲 `G` 到 `P` 里，再重试
@@ -281,8 +281,8 @@ func newproc(siz int32, fn *funcval) {
         runqput(_p_, newg, true)                 // 将 G 加入到 P 的运行队列
       
       	if mainStarted {
-						wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
-				}
+		    wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
+		}
     })
 }
 ```
@@ -344,7 +344,15 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 
 
 
-## 创建M
+## 创建P
+
+`P` 只在初始化的时候创建，数量为 `GOMAXPROCS`，一般建完就不会再变了，除非用户调用 `runtime.MAXGOPROCS` 调整 `P` 的数量。
+
+不过官方的注释已经明确的说明了 `runtime.MAXGOPROCS` 在后续改进调度器后会被移除。
+
+
+
+## 创建 M
 
 在 `newproc` 里可以看到一个 `wakep()` 函数，作用是唤醒空闲 `M` 执行空闲 `P`，如果有空闲 `P` 但没有空闲 `M`，就会新建一个 `M`。
 
@@ -383,19 +391,19 @@ func newm(fn func(), _p_ *p, id int64) {
 func allocm(_p_ *p, fn func(), id int64) *m {
     mp := new(m)        // 创建M对象 
   	mp.mstartfn = fn    // 设置启动函数
-	  mcommoninit(mp, id) // 初始化
+	mcommoninit(mp, id) // 初始化
   
-		mp.g0 = malg(8192 * sys.StackGuardMultiplier)
+	mp.g0 = malg(8192 * sys.StackGuardMultiplier) // 初始化g0
     mp.g0.m = mp
 }
 
 // 为M创建系统线程
 func newm1(mp *m) {
-  	newosproc(mp)             // 创建系统线程
+  	newosproc(mp) // 创建系统线程
 }
 
 // runtime.os_linux.go
-// 这个函数根据具体os的实现是不一样的，linux下用的是clone()，macOS下用的就是pthread_create
+// 这个函数根据具体 os 的实现是不一样的，linux 下用的是 clone()，macOS 下用的就是 pthread_create()
 // 初始 func 是 mstart，mstart() 会触发调度 schedule()
 func newosproc(mp *m) {
   	ret := clone(cloneFlags, stk, unsafe.Pointer(mp), unsafe.Pointer(mp.g0), unsafe.Pointer(funcPC(mstart)))
@@ -404,7 +412,7 @@ func newosproc(mp *m) {
 
 `M` 比较特别的地方是自带一个名为 `g0`，默认 `8KB` 栈内存的 `G` 属性对象。它的栈内存地址被传给 `clone` 函数，作为系统线程的默认堆栈空间（Linux下）。
 
-通过它，`M` 可以无 `P` 执行 `runtime` 管理指令，比如 `systemstack` 这种执行方式。
+通过 `g0`，`M` 可以无 `P` 执行 `runtime` 管理指令，比如 `systemstack` 这种执行方式。
 
 在进程执行过程中，有两类代码需要运行。
 
@@ -427,7 +435,7 @@ func newosproc(mp *m) {
         - 这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到
     - 偷窃前会将 `M` 的自旋状态设为 `true`，偷窃后再改回去
     - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身休眠（放回`M`池子）
-4. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的`P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime`会新建一个`M`。
+4. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的`P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime` 会新建一个 `M`。
 5. `execute`，执行代码。
 
 
@@ -573,12 +581,12 @@ func globrunqget(_p_ *p, max int32) *g {
 ## 调度时机
 
 - 新建 `M` 后，`mstart` 里触发 `schedule`
+- 新建 `G` 后（`go func`）
 - 阻塞性系统调用，比如文件 IO，网络IO
   - Golang 重写了所有系统调用，在系统调用里加入了调度逻辑（更改 `G`状态、`M` 和`P` 解绑、 `schedule `等）
 - time系列定时操作
   - `time.Sleep` 会调用 `gopark`、`goready` 等
-- `go func` 的时候、`func` 执行完的时候
-- 管道读写阻塞的时候
+- `automic`、锁、管道读写等导致的阻塞，会触发 `gopark`
 - 垃圾回收之后
 - 主动调用 `runtime.Gosched()`，这个很少见，一般调试才用
 
@@ -606,3 +614,6 @@ func globrunqget(_p_ *p, max int32) *g {
 > [golang 调度学习-综述](https://blog.csdn.net/diaosssss/article/details/92830782)
 >
 > [golang核心原理-协程调度时机](https://studygolang.com/articles/34362)
+> 
+> [lucifer_L49715 - 理解golang调度之二 ：Go调度器](https://juejin.cn/post/6844903846825705485)
+
