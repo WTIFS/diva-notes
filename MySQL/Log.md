@@ -82,7 +82,7 @@ type redo log block struct {
 
 ```go
 type log block struct {
-	type                 // 日志类型（插入/删除）
+	type                 // 操作类型（插入/删除）
 	space                // 空间ID
 	page_no              // 页偏移量，表示第几页
 	struct {             // 数据部分

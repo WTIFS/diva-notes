@@ -16,12 +16,12 @@
 比如如下代码：
 
 ```go
-0: func run() {
-1:    defer foo()
-2:    defer bar()
-3:
-4:    fmt.Println("hello")
-5: }
+func run() {
+    defer foo()
+    defer bar()
+
+    fmt.Println("hello")
+}
 ```
 
 编译器会生成类似如下的代码：
@@ -77,11 +77,11 @@ foo() // generated for line 5
 ```go
 // src/runtime/runtime2.go
 type _defer struct {
-    siz       int32    //参数和结果的大小
+    siz       int32    // 参数和结果的大小
     heap      bool     // 是否是堆上分配
     openDefer bool     // 开放编码
     sp        uintptr  // 栈指针
-    pc        uintptr  // 调用方的程序计数器
+    pc        uintptr  // 调用方的程序计数器 program counter
     fn        *funcval // 传入的函数
     _panic    *_panic  // panic that is running defer
     link      *_defer  // defer链表
@@ -97,16 +97,16 @@ type _defer struct {
 ```go
 // src/runtime/panic.go
 func deferproc(siz int32, fn *funcval) {  
-  	sp := getcallersp()                                      // 获取sp指针
-	  argp := uintptr(unsafe.Pointer(&fn)) + unsafe.Sizeof(fn) // 获取fn函数后指针作为参数
-		callerpc := getcallerpc()
+  	sp := getcallersp()                                      // 获取 sp 指针
+	argp := uintptr(unsafe.Pointer(&fn)) + unsafe.Sizeof(fn) // fn 函数后紧跟的就是参数列表
+	callerpc := getcallerpc()
 	
-		d := newdefer(siz) 	// 新建一个 _defer
+	d := newdefer(siz) 	// 新建一个 _defer
     d.link = gp._defer  // 把原链表挂在新 defer 后面
-	  gp._defer = d       // 把链表写入G里
+	gp._defer = d       // 把链表写入G里
   
     d.fn = fn
-	  d.pc = callerpc
+	d.pc = callerpc
   	d.sp = sp
     
     // 进行参数拷贝

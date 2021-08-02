@@ -186,7 +186,7 @@ loadFactor := count / (2^B)
 
 这两种条件下都会发生扩容。但是扩容的策略并不相同，毕竟两种条件应对的场景不同。
 
-1. 对于条件 1，元素太多，而 `bucket` 数量太少，很简单：将 `B` 加 1，`bucket` 数量直接变成原来的 2 倍。于是，就有新老 `bucket` 了。注意，这时候元素都在老 `bucket` 里，还没迁移到新的 `bucket` 来。这种扩容叫 **增量扩容**。
+1. 对于条件 1，元素太多，而 `bucket` 数量太少，很简单：将 `B` 加 `1`，新申请一个 `2^(B+1)` 的 `bucket`，`bucket` 数量直接变成原来的 `2` 倍。于是，就有新老 `bucket` 了。注意，这时候元素都在老 `bucket` 里，还没迁移到新的 `bucket` 来。这种扩容叫 **增量扩容**。
 
 2. 对于条件 2，其实元素没那么多，但是 `overflow bucket` 数特别多，说明很多 `bucket` 都没装满。解决办法就是开辟一个新 `bucket` 空间，将老 `bucket` 中的元素移动到新 `bucket`，使得同一个 `bucket` 中的 `key` 排列地更紧密。这种叫 **等量扩容**。严格上说其实不算扩容，算整理碎片。
 
@@ -214,8 +214,8 @@ func hashGrow(t *maptype, h *hmap) {
         h.flags |= sameSizeGrow
     }
         
-    oldbuckets := h.buckets // 将buckets赋值给oldbuckets
-    newbuckets := newarray(t.bucket, 1<<(h.B+bigger))
+    oldbuckets := h.buckets                           // 将buckets赋值给oldbuckets
+    newbuckets := newarray(t.bucket, 1<<(h.B+bigger)) // 申请一个新的、容量为两倍的 bucket 数组
     flags := h.flags &^ (iterator | oldIterator)
     if h.flags&iterator != 0 {
         flags |= oldIterator
@@ -313,11 +313,11 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 				if !h.sameSizeGrow() {                             // 如果不是等量扩容
 					hash := alg.hash(k2, uintptr(h.hash0))         // rehash
 					
-                    // rehash的值，由于 B 是 *=2，因此只有 newbit 这位上可能和原hash 不一样，如果一样就留在原桶；否则移入新桶
+                    // rehash的值，由于 B 是 *=2，因此只有 newbit 这位上可能和原 hash 不一样，一样就留在原桶；否则移入新桶
                     useX = hash&newbit == 0                        
 				}
 
-				// 如果 key 搬到 X 部分
+				// 如果 key 搬到 X 部分，即等量扩容的逻辑
 				if useX {
 					b.tophash[i] = evacuatedX       // 标志老的 cell 的 top hash 值，表示搬移到 X 部分
 					if xi == bucketCnt {            // 如果 xi 等于 8，说明要溢出了
@@ -344,7 +344,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 					xk = add(xk, uintptr(t.keysize))
 					xv = add(xv, uintptr(t.valuesize))
 				} else { 
-                    // key 搬到 Y 部分，操作同 X 部分
+                    // key 搬到 Y 部分，即增量扩容的逻辑，操作同 X 部分
 					// ...
 				}
 			}
@@ -397,11 +397,16 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 
 
+
+
+## 遍历
+
 理解了上面 `bucket` 序号的变化，我们就可以回答另一个问题了：为什么遍历 `map` 是无序的？
 
-`map` 在扩容后，会发生 `key` 的搬迁，原来落在同一个 `bucket` 中的 `key`，搬迁后，有些 `key` 就要远走高飞了（`bucket` 序号加上了 2^B）。因此，遍历、修改`map`、再遍历，两次得到的遍历顺序就可能不一样了。
+1. `map` 根本就没有维护 `key` 的顺序，计算 `key` 的桶时是用 `hash` 算的，本来有序的 `key`，`hash` 后就无序了。
+2. `map` 在扩容后，会发生 `key` 的搬迁，原来落在同一个 `bucket` 中的 `key`，搬迁后，有些 `key` 就要远走高飞了（`bucket` 序号加上了 `2^B`）。因此，遍历、修改`map`、再遍历，两次得到的遍历顺序就可能不一样了。
 
-当然，`Go` 做得更绝，遍历 `map` 时，并不是固定地从 `0` 号 `bucket` 开始遍历，而是从一个随机 `bucket` 开始，并且是从这个 `bucket` 的随机 `cell` 开始遍历。特意设计成了无序迭代的结果。
+当然，`Go` 做得更绝，遍历 `map` 时，并不是固定地从 `0` 号 `bucket` 开始遍历，而是通过 `fastrand` 算了个随机数，从一个随机 `bucket` 开始，并且是从这个 `bucket` 的随机 `cell` 开始遍历。特意设计成了无序迭代的结果。
 
 
 
