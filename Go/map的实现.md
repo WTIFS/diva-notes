@@ -451,6 +451,22 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 
 
+#### 问题
+
+##### 删除掉map中的元素是否会释放内存？
+
+不会，删除操作仅仅将对应的 `tophash[i]` 设置为 `empty`，并非释放内存。若要释放内存只能等待指针无引用后被系统 `GC`
+
+
+
+##### map的iterator是否安全？
+
+`map` 的 `delete` 并非真的 `delete`，所以对迭代器是没有影响的，是安全的。
+
+
+
+
+
 #### 参考
 
 > [Stefno - 深度解密Go语言之 map](https://zhuanlan.zhihu.com/p/66676224)

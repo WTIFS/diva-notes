@@ -3,7 +3,7 @@
 
 极少变更的数据放到 `read` 里，读 `read` 无需加锁，更新 `read` 依靠 `CAS` 也不用加锁，性能极高。
 
-频繁变更的数据放到 `dirty` 里。这类数据的读写需要加锁。
+新增的数据放到 `dirty` 里。这类数据的读写需要加锁。
 
 读取数据时，先查 `read`，再查 `dirty`，当读 `read` cache miss 累计到一定次数时，则将数据从 `dirty` 移入 `read`
 
@@ -168,10 +168,10 @@ func (m *Map) Store(key, value interface{}) {
 
 
 # 总结
-1. 空间换时间：通过冗余的两个数据结构(read、dirty)，减少加锁对性能的影响。
+1. 空间换时间：通过冗余的两个数据结构 (read、dirty)，减少加锁对性能的影响。
 2. 使用只读数据 (read)，避免读写冲突。
-3. 动态调整，miss次数多了之后，将dirty数据迁移到read中。
+3. 动态调整，miss 次数多了之后，将 dirty 数据迁移到read中。
 4. double-checking。
 5. 延迟删除。 删除一个键值只是打标记 (go的map都是这样，这个不是sync.Map特有的)。只有在迁移dirty数据的时候才清理删除的数据。
-6. 优先从read读取、更新、删除，因为对read的读取不需要锁。
+6. 优先从 read 读取、更新、删除，因为对 read 的读取不需要锁。
 7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如 [concurrent-map](https://github.com/orcaman/concurrent-map)
