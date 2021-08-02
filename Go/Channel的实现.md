@@ -41,11 +41,11 @@
 //src/runtime/chan.go
 
 type hchan struct {
-	qcount   uint           // total data in the queue 当前队列里还剩余元素个数
-	dataqsiz uint           // size of the circular queue 环形队列长度，即缓冲区的大小，即make(chan T,N) 中的N
+	qcount   uint           // 当前队列里的元素个数
+	dataqsiz uint           // 环形队列长度，即缓冲区的大小，即make(chan T, N) 中的N
 	buf      unsafe.Pointer // points to an array of dataqsiz elements 环形队列指针
-	elemsize uint16         //每个元素的大小
-	closed   uint32         //标识当前通道是否处于关闭状态，创建通道后，该字段设置0，即打开通道；通道调用close将其设置为1，通道关闭
+	elemsize uint16         // 每个元素的大小
+	closed   uint32         // 标识当前通道是否处于关闭状态，创建通道后，该字段设置0，即打开通道；通道调用close将其设置为1，通道关闭
 	elemtype *_type         // element type 元素类型，用于数据传递过程中的赋值
 	sendx    uint           // send index 环形缓冲区的状态字段，它只是缓冲区的当前索引-支持数组，它可以从中发送数据
 	recvx    uint           // receive index 环形缓冲区的状态字段，它只是缓冲区当前索引-支持数组，它可以从中接受数据
@@ -501,6 +501,8 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 
 
 
+
+
 ## 样例
 
 读空 `channel`，阻塞
@@ -527,6 +529,10 @@ x, ok := <- t //0, false
 t := make(chan int)
 t <- 1 //阻塞在这里，必须有其他gorutine消费才可以继续执行
 ```
+
+
+
+
 
 
 
