@@ -275,7 +275,7 @@ type schedt struct {
     - 先从 `P` 的 `gfree` 字段取空闲 `G`，没有再从 `sched.gfree` 链表里转移一批空闲 `G` 到 `P` 里，再重试
     - 再没有，才会新建
 - 新的 `goroutine` 会被加到本地队列里
-  - 通过 `go` 关键字新建的协程，会被放到本地队列的头部
+  - 通过 `go` 关键字新建的协程，会被放到本地队列的头部（`runnext` 字段）
   - 调度时，会从队列里 `pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
 - `P` 的本地队列长度超过 `64` 时，里面一半的 `G` 会被转移至全局队列
 - 任务队列分为三级，分别是 `P.runnext`, `P.runq`, `Sched.runq`，很有些 CPU 多级缓存的意思。
