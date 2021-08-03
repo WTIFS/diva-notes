@@ -12,21 +12,48 @@
 
 
 
-### 主节点选取
+## 故障检测
 
 - 每个 `sentinel`（哨兵）进程以每秒钟一次的频率向整个集群中的 `master` 主服务器，`slave` 从服务器以及其他 `sentinel` 进程发送一个 `PING` 命令
 - 如果一个实例距离最后一次有效回复 `PING` 命令的时间超过 `down-after-milliseconds` 选项所指定的值， 则这个实例会被哨兵进程标记为主观下线 `SDOWN`
-- 如果一个 `master` 被标记为主观下线 `SDOWN`，则正在监视这个 `master` 的所有 `sentinel` 进程会以每秒一次的频率确认 `master` 的确进入了主观下线状态
-- 当有足够数量的 `sentinel`（大于等于配置文件指定的值）在指定的时间范围内确认 `master` 进入了主观下线状态， 则 `master` 会被标记为客观下线 `ODOWN`
+  - 如果主观下线的是 `slave` 或者 `sentinel` ，则没有后续的操作
+- 主观下线的节点为主节点时，该 `sentinel` 节点可以通过命令 `sentinel is_master_down_by_addr` 来获得其他 `sentinel` 对于该主节点的判断
+- 当有超过 `QUORUM`（配置文件里的）个 `sentinel` 判定主观下线时，`master` 会被标记为客观下线 `ODOWN`
 - 在一般情况下，每个 `sentinel` 进程会以每 `10` 秒一次的频率向集群中的所有 `master` 、`slave` 从服务器发送 `INFO` 命令。
-- 当 `master` 主服务器被 `sentinel` 进程标记为客观下线 `ODOWN` 时，`sentinel` 进程向下线的 `master` 的所有 `slave` 发送 `INFO` 命令的频率会从 `10` 秒一次改为每秒一次。
-- 若没有足够数量的 `sentinel` 进程同意 `master` 下线， `master` 的客观下线状态就会被移除。若 `master` 重新向 `sentinel` 的 `PING` 命令返回有效回复，`master` 的主观下线状态就会被移除。
+- 若没有足够数量的 `sentinel` 同意 `master` 下线， `master` 的客观下线状态就会被移除。若 `master` 重新向 `sentinel` 的 `PING` 命令返回有效回复，`master` 的主观下线状态就会被移除。
 
 
 
 
 
-### 哨兵模式的优缺点
+## Leader Sentinel 选取
+
+当 `sentinel` 对于 `master` 已经做了客观下线，并不是马上就可以开始故障转移，而是先从 `sentinel` 中选举出一个领导者，让领导者去完成故障转移的工作。
+
+1. 每个 `sentinel` 都有资格成为领导者，当它确认主节点主观下线时，会向其他 `sentinel` 发送 `sentinel is-master-down-by-addr` 命令，要求竞选
+2. 命令的 `sentinel` 节点，如果没投过票，将同意该请求，否则拒绝（先到先被投）
+3. 如果该 `sentinel` 节点发现自己的票数已经大于等于 `max(QUORUM, num(sentinels)/2+1)`，那么它将成为领导者
+4. 如果此过程没有选举出领导者，将进入下一次选举。
+
+
+
+
+
+## 主节点选取
+
+领头 `sentinel` 会将已下线 `master` 的所有从服务器保存在一个列表中，按照规则进行挑选。
+
+1. 排除所有下线、没有回复 `INFO` 命令、与 `master` 断开超过一定时长的从节点
+2. 按照 `slave` 复制偏移量，选出其中偏移量最大的 `slave`。如果有多个优先级一样的的 `slave`，则选取 `run id` 最小的。
+3. 选出新的 `master` 之后，领头 `sentinel` 会以每秒一次的频率向新的 `master` 发送 `SLAVEOF の one` 命令，当得到确切的回复 `role` 由 `slave` 变为 `master` 之后，当前服务器顺利升级为 `master` 服务器。
+4. 领头 `sentinel` 向其他从节点发送 `SLAVEOF` 命令，让其他服务器跟踪这个新的主节点。
+5. 领头 `sentinel` 会将原来的主节点更新为从节点，并保持对其关注，当其恢复后命令它去复制新的主节点。
+
+
+
+
+
+## 哨兵模式的优缺点
 
 #### 优点
 
@@ -41,10 +68,18 @@
 
 
 
-### raft协议
+## raft协议
 
 `sentiel` 和 `cluster` 的主节点选取，参考了 `raft` 协议（是否就是 `raft` 协议，存疑。有的说是，但实现细节上是有不同的）
 
 至于主从同步、数据一致性，则完全没有使用 `raft` 协议。`raft` 要求主节点收到命令后，至少同步给一定的从节点后，才视为成功返回结果。而 `redis` 是全异步的，主节点写成功就视为成功。
 
  `redislab` 有个 `redis` 的插件，以插件的形式，专门使用 `raft` 实现了分布式一致。
+
+
+
+
+
+#### 参考
+
+> [JAY-CHOW - 【Redis学习】Sentinel集群选举机制](https://blog.csdn.net/kezade/article/details/115046236)
