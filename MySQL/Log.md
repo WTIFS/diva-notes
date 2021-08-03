@@ -17,9 +17,18 @@
 
 
 
+#### 用途
+
+1. 提高持久化时写硬盘的性能
+2. 崩溃恢复时恢复最近数据
+   1. `redo log file` 记录着 xxx 页做了 xxx 修改，所以即使 `MySQL` 发生宕机，也可以通过 `redo log` 进行数据恢复，也就是说在内存中更新成功后，即使没有刷新到磁盘中，但也不会因为宕机而导致数据丢失。
+
+
+
 #### 基本概念
 
-redo log 包括两部分：
+`redo log` 包括两部分：
+
 1. 内存中的日志缓冲 (`redo log buffer`)
 2. 磁盘上的日志文件 (`redo log file`)
 
@@ -100,18 +109,19 @@ type log block struct {
 
 # binlog
 
-[MySQL](架构.md) 整体来看，其实就有两块：一块是 Server 层，它主要做的是功能层面的事情；还有一块是引擎层，负责存储相关的具体事宜。
+`MySQL` 整体来看，其实有两块：一块是 `Server` 层，它主要做的是功能层面的事情；还有一块是引擎层，负责存储相关的具体事宜。
 
-上面我们聊到的 redo log 是 InnoDB 引擎特有的日志，而 Server 层也有自己的日志，称为 binlog（归档日志）。
+上面我们聊到的 `redo log` 是 `InnoDB` 引擎特有的日志，而 `Server` 层也有自己的日志，称为 `binlog`（归档日志）。
 
-为什么会有两份日志呢？因为最开始 MySQL 里并没有 InnoDB 引擎。MySQL 自带的引擎是 MyISAM，但 MyISAM 没有 crash-safe 的能力，binlog 日志只能用于归档。而 InnoDB 是另一个公司以插件形式引入 MySQL 的，既然只依靠 binlog 是没有 crash-safe 能力的，所以 InnoDB 使用另外一套日志系统——也就是 redo log 来实现 crash-safe 能力。
+为什么会有两份日志呢？因为最开始 `MySQL` 里并没有 `InnoDB` 引擎。`MySQL` 自带的引擎是 `MyISAM`，但 `MyISAM` 没有 `crash-safe` 的能力，`binlog` 日志只能用于归档。而 `InnoDB` 是另一个公司以插件形式引入 `MySQL` 的，既然只依靠 `binlog` 是没有 `crash-safe` 能力的，所以 `InnoDB` 使用另外一套日志系统——也就是 `redo log` 来实现 `crash-safe` 能力。
 
 这两种日志有以下三点不同：
 
-1. 层次不同。redo log 是 InnoDB 引擎特有的；binlog 是 MySQL 的 Server 层实现的，所有引擎都可以使用。
-2. 格式不同。redo log 是**物理日志**，记录的是 **数据页变更**；binlog 是**逻辑日志**，记录的是这个语句的原始逻辑，比如 "给 id=2 这一行的 c 字段加 1 "。
-3. 占用空间不同。redo log 是循环写的，空间固定会用完；binlog 是可以追加写入的，写到一定大小后会切换到下一个，并不会覆盖以前的日志。
-4. 写入时机不同，见下
+1. 层次不同。`redo log` 是 `InnoDB` 引擎特有的；`binlog` 是 `MySQL` 的 `Server` 层实现的，所有引擎都可以使用。
+2. 格式不同。`redo log` 是**物理日志**，记录的是 **数据页变更**；`binlog` 是**逻辑日志**，记录的是这个语句的原始逻辑，比如 "给 id=2 这一行的 c 字段加 1 "。
+3. 占用空间不同。`redo log` 是循环写的，空间固定会用完；binlog 是可以追加写入的，写到一定大小后会切换到下一个，并不会覆盖以前的日志。
+4. 作用不同。 `binlog` 记录的是逻辑，因此可以用于主从同步（从库初始化、从库同步）；`redo log` 记的是最近的数据，可以用于宕机恢复。
+5. 写入时机不同，见下
 
 
 
@@ -147,7 +157,8 @@ type log block struct {
 
 #### 刷盘时机
 
-MySQL 通过 `sync_binlog` 参数控制 binlog 的刷盘时机，取值范围是 `0-N`：
+`MySQL` 通过 `sync_binlog` 参数控制 binlog 的刷盘时机，取值范围是 `0-N`：
+
 - 0：不强制要求，由系统自行判断何时写入磁盘
 - 1：每次 `COMMIT` 时都要将 binlog 写入磁盘（默认）
 - N：每 N 个事务，才会将 binlog写入磁盘
@@ -157,7 +168,7 @@ MySQL 通过 `sync_binlog` 参数控制 binlog 的刷盘时机，取值范围是
 
 
 #### 日志格式
-binlog 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。默认为 `ROW`。
+`binlog` 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。默认为 `ROW`。
 
 - `STATMENT` 
   - 基于 `SQL` 语句的复制  (`statement-based replication, SBR`)，每一条会修改数据的 `SQL` 语句都会记录到 binlog 中 
@@ -179,31 +190,53 @@ binlog 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。默认
 
 # undo log
 
-Undo log 有两个作用：回滚和 `MVCC`。
+`undo log` 有两个作用：回滚和 `MVCC`。
 
-undo log 和 redo log 记录物理日志不一样，它是逻辑日志。可以认为当 delete 一条记录时，undo log 中会记录一条对应的 insert 记录，反之亦然，当 update  一条记录时，它记录一条对应相反的 update 记录。
+`undo log` 和 `redo log` 记录物理日志不一样，它是逻辑日志。可以认为当 `delete` 一条记录时，`undo log` 中会记录一条对应的 `insert` 记录，反之亦然，当 `update`  一条记录时，它记录一条对应相反的 `update` 记录。
 
-当执行回滚时，就可以从 undo log 中的逻辑记录读取到相应的内容并进行回滚。
+当执行回滚时，就可以从 `undo log` 中的逻辑记录读取到相应的内容并进行回滚。
 
-应用到行版本控制的时候，也是通过 undo log 来实现的：当读取的某一行被其他事务锁定时，它可以从 undo log 中分析出该行记录以前的数据是什么，从而提供该行版本信息，让用户实现非锁定一致性读取。
+应用到行版本控制的时候，也是通过 `undo log` 来实现的：当读取的某一行被其他事务锁定时，它可以从 `undo log` 中分析出该行记录以前的数据是什么，从而提供该行版本信息，让用户实现非锁定一致性读取。
 
-undo log 默认存放在共享表空间中。可以通过配置，改到别的数据文件里。
+`undo log` 默认存放在共享表空间中。可以通过配置，改到别的数据文件里。
 
 
 
 #### delete/update操作的内部机制
 
-当事务提交的时候，innodb 不会立即删除 undo log，因为后续还可能会用到 undo log，如隔离级别为 repeatable read 时，事务读取的都是开启事务时的最新提交行版本，只要该事务不结束，该行版本就不能删除，即 undo log 不能删除。
+当事务提交的时候，`innodb` 不会立即删除 `undo log`，因为后续还可能会用到 `undo log`，如隔离级别为 `repeatable read` 时，事务读取的都是开启事务时的最新提交行版本，只要该事务不结束，该行版本就不能删除，即 `undo log` 不能删除。
 
-但是在事务提交的时候，会将该事务对应的 undo log 放入到删除列表中，未来通过 `purge` 线程来删除。
+但是在事务提交的时候，会将该事务对应的 `undo log` 放入到删除列表中，未来通过 `purge` 线程来删除。
 
-delete 操作实际上不会直接删除，而是将对象打上 delete flag，标记为删除，最终的删除操作是 `purge` 线程完成的。
+`delete` 操作实际上不会直接删除，而是将对象打上 `delete flag`，标记为删除，最终的删除操作是 `purge` 线程完成的。
 
-update 分为两种情况：
-- 如果更新的不是主键列，在 undo log 中直接反向记录是如何 update 的。即 update 是直接进行的。
-- 如果更新的是主键列，则先删除该行，再插入一行目标行，和 postgreSQL 一样。
+`update` 分为两种情况：
+
+- 如果更新的不是主键列，在 `undo log` 中直接反向记录是如何 `update` 的。即 `update` 是直接进行的。
+- 如果更新的是主键列，则先删除该行，再插入一行目标行，和 `postgreSQL` 一样。
 
 
+
+
+
+#### 问题
+
+##### 为什么有了 binlog 还需要 redo log ?
+
+1. 历史原因：`innodb` 并不是 `MySQL` 的原生存储引擎。`MySQL` 的原生引擎是 `myISAM`，设计之初就没有支持崩溃恢复。
+2. 实现原因：由于 `binlog` 记的是逻辑日志，发生了崩溃之后，是无法凭借 `binlog` 把那些已经提交过的事务进行恢复的（你得找 `binlog offset` 之后执行的数据行，然后从头找这些行的所有记录才能恢复，代价太大）
+
+
+
+##### 为什么有了redo log 还需要 binlog ?
+
+`redo log` 是循环写，写到末尾是要回到开头继续写的，也就不包含完整数据，不能用于从库初始化
+
+
+
+##### 和 redis 的 rdb / aof 日志比较 ?
+
+`binlog` 的机制和 `aof` 类似，而 `redo log` 更像是 `rdb` 和 `aof` 的结合，它的物理写入像 `rdb`，但持续写入的行为像 `aof`，另外它只存最近的数据，不会存全量
 
 
 
