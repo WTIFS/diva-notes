@@ -32,6 +32,8 @@ struct __attribute__ ((__packed__)) sdshdr8 {
 
 
 
+
+
 ### Append 函数的实现
 新字符串长度 = (原有长度 + 新长度) + 预分配空间
 
