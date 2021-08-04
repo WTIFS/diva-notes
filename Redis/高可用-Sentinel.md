@@ -45,7 +45,7 @@
 
 1. 排除所有下线、没有回复 `INFO` 命令、与 `master` 断开超过一定时长的从节点
 2. 按照 `slave` 复制偏移量，选出其中偏移量最大的 `slave`。如果有多个优先级一样的的 `slave`，则选取 `run id` 最小的。
-3. 选出新的 `master` 之后，领头 `sentinel` 会以每秒一次的频率向新的 `master` 发送 `SLAVEOF の one` 命令，当得到确切的回复 `role` 由 `slave` 变为 `master` 之后，当前服务器顺利升级为 `master` 服务器。
+3. 选出新的 `master` 之后，领头 `sentinel` 会以每秒一次的频率向新的 `master` 发送 `SLAVEOF no one` 命令，当得到确切的回复 `role` 由 `slave` 变为 `master` 之后，当前服务器顺利升级为 `master` 服务器。
 4. 领头 `sentinel` 向其他从节点发送 `SLAVEOF` 命令，让其他服务器跟踪这个新的主节点。
 5. 领头 `sentinel` 会将原来的主节点更新为从节点，并保持对其关注，当其恢复后命令它去复制新的主节点。
 

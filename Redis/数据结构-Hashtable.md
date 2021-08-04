@@ -24,15 +24,13 @@ typedef struct dictEntry {
 // 哈希表
 // 每个字典都使用两个哈希表子结构，以实现渐进式 rehash 。
 typedef struct dict {
-    // 类型特定函数
-    dictType *type;
-    // 私有数据
-    void *privdata;
-    dictht ht[2]; //ht=hash table，每个dict有俩，增量扩容时使用
+    dictType *type; // 类型特定函数
+    void *privdata; // 私有数据
+    dictht ht[2];   // ht=hash table，每个dict有俩，增量扩容时使用
     
     // 搬迁进度
     // 因为是渐进式的哈希，数据的迁移并不是一步完成的，所以需要有一个索引来标记当前的搬迁进度
-    // rehash是以bucket(桶)为基本单位进行渐进式的数据迁移的，每步完成一个bucket的迁移，直至所有数据迁移完毕
+    // rehash 是 以bucket(桶)为基本单位进行渐进式的数据迁移的，每步完成一个 bucket 的迁移，直至所有数据迁移完毕
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
 } dict;
@@ -52,9 +50,11 @@ typedef struct dictht {
 } dictht;
 ```
 
+![image-20210804164931040](assets/image-20210804164931040.png)
 
 
-在 `redis` 中，扩展或收缩哈希表需要将 `ht[0]` 里面的所有键值对 `rehash` 到 `ht[1]` 里面， 但是， 这个 `rehash` 动作并不是一次性、集中式地完成的， 而是分多次、渐进式地完成的。为了避免 `rehash` 对服务器性能造成影响， 服务器不是一次性将 `ht[0]` 里面的所有键值对全部 `rehash` 到 `ht[1]` ， 而是分多次、渐进式地将 `ht[0]` 里面的键值对慢慢地 `rehash` 到 `ht[1]` 。这个跟 `Golang` 里 `map` 的扩容几乎是一样的。
+
+在 `redis` 中，扩展或收缩哈希表需要将 `ht[0]` 里面的所有键值对 `rehash` 到 `ht[1]` 里面， 但是， 为了避免 `rehash` 对服务器性能造成影响，这个 `rehash` 动作并不是一次性、集中式地完成的， 而是分多次、渐进式地完成的。 这个跟 `Golang` 里 `map` 的扩容几乎是一样的。
 
 
 
@@ -71,8 +71,8 @@ typedef struct dictht {
 ## 哈希表渐进式 rehash 的详细步骤
 1. 为 `ht[1]` 分配两倍原哈希表的空间， 让字典同时持有 `ht[0]` 和 `ht[1]` 两个哈希表。
 2. 在字典中维持一个索引计数器变量 `rehashidx` ， 并将它的值设置为 `0` ， 表示 `rehash` 工作正式开始。
-3. 在 `rehash` 进行期间， 每次对字典执行添加、删除、查找或者更新操作时， 程序除了执行指定的操作以外， 还会顺带将 `ht[0]` 哈希表在 `rehashidx` 索引上的所有键值对 `rehash` 到 `ht[1]` ， 当 `rehash` 工作完成之后， 程序将 `rehashidx` 的值加1。
-4. 随着字典操作的不断执行， 最终在某个时间点上， ht[0] 的所有键值对都会被 rehash 至 ht[1] ， 这时程序将 rehashidx 属性的值设为 -1 ， 表示 rehash 操作已完成。
+3. 在 `rehash` 进行期间， 每次对字典执行添加、删除、查找或者更新操作时， 程序除了执行指定的操作以外， 还会顺带将 `ht[0]` 哈希表在 `rehashidx` 索引上的所有键值对 `rehash` 到 `ht[1]` ， 当 `rehash` 工作完成之后， 程序将 `rehashidx` 的值加 `1`。期间 `hash[0]` 停写。
+4. 随着字典操作的不断执行， 最终在某个时间点上， `ht[0]` 的所有键值对都会被 `rehash` 至 `ht[1]` ， 这时将 `rehashidx` 属性设为 `-1` ， 表示 `rehash` 已完成。
 
 
 
