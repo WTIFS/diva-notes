@@ -74,7 +74,7 @@ redis启动后会进入一个死循环 `aeMain`，在这个循环里一直等待
 - `epoll_wait` 返回的是当前可读、可写的 `socket列表`
 - `beforeSleep` 是进入休眠前执行的逻辑，核心是回写数据到 `socket`
 - 核心逻辑都是由IO事件触发，要么可读，要么可写，否则执行 `timer` 定时任务
-- 第一次的IO可读事件，是监听 `socket` (如6379的 `socket`)，当有握手请求时，会执行 `accept`调用，得到一个连接 `socket`，注册可读回调 `createClient`，往后客户端和redis的数据都通过这个 `socket` 进行
+- 第一次的IO可读事件，是监听 `socket` (如 `6379` 的 `socket`)，当有握手请求时，会执行 `accept`调用，得到一个连接 `socket`，注册可读回调 `createClient`，往后客户端和redis的数据都通过这个 `socket` 进行
 - 一个完整的命令，可能会通过多次 `readQueryFromClient` 才能从 `socket` 读完，这意味着多次可读IO事件
 - 命令执行的结果会写，也是这样，大概率会通过多次可写回调才能写完
 - 当命令被执行完后，对应的连接会被追加到 `clients_pending_write`，`beforeSleep` 会尝试回写到 `socket`，写不完会注册可写事件，下次继续写

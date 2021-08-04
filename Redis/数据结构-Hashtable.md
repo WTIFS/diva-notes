@@ -20,6 +20,8 @@ typedef struct dictEntry {
 
 ## dict 哈希表
 
+`redis` 里的 `hashtable` 使用了链表法解决哈希冲突。
+
 ```c
 // 哈希表
 // 每个字典都使用两个哈希表子结构，以实现渐进式 rehash 。
