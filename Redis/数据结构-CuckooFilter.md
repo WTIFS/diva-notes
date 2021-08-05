@@ -1,17 +1,38 @@
 # 布谷鸟过滤器
 
-不储存元素的原始值，而是存其指纹信息 `fingerprint`。
+不储存元素的原始值，而是存其指纹信息 `fingerprint`（`8` 位的 `bit`）。
 
-将元素转为 `hash`。每个元素计算 `2` 个 `hash` 作为下标。一个主位置，一个备选位置。
+将元素转为 `hash`。每个元素计算 `2` 个 `hash` 作为下标。一个主位置，一个备选位置。并且主备位置可以互相算出来。
 
 插入元素时，如果主位置已经被占了，则将占用的元素 `A` 踢到 `A` 的备选位置上，如果备选位置上还有元素 `B`，再把 `B` 踢到 `B` 备选位置上，依次进行直到成功或到达次数上线。
 
 如果到达次数上限，则说明该扩容了。
 
-`Redisbloom` 里的布谷鸟过滤器还支持多次重复添加/删除一个元素，做法是使用多组桶 `filter`。
+`Redisbloom` 里的布谷鸟过滤器还支持多次重复添加/删除一个元素，做法是，首先，一个桶内有 `8` 个位置可以插入，二是 `8` 位置都满了后，还可以增加多组桶 `filter`。
+
+
+
+
+
+## 查找
+
+查找元素时，分别查找主位置和备选位置上是否有相应的指纹。
 
 ```c
-//插入部分代码
+static void getLookupParams(CuckooHash hash, LookupParams *params) {
+    params->fp = hash % 255 + 1;                     // 指纹
+    params->h1 = hash;                               // 主位置
+    params->h2 = getAltHash(params->fp, params->h1); // 备选位置
+}
+```
+
+
+
+
+
+## 插入
+
+```c
 static CuckooInsertStatus Filter_KOInsert(CuckooFilter *filter, SubCF *curFilter, const LookupParams *params) {
 
     while (counter++ < maxIterations) {
@@ -22,8 +43,8 @@ static CuckooInsertStatus Filter_KOInsert(CuckooFilter *filter, SubCF *curFilter
         
         // Insert the new item in potentially the same bucket
         uint8_t *empty = Bucket_FindAvailable(&curFilter->data[ii * bucketSize], bucketSize);  // 下一个位置可以在本bucket内
-        if (empty) { // 如果下个位置是空的，则直接插入
-            *empty = fp;
+        if (empty) {     // 如果下个位置是空的，则直接插入
+            *empty = fp; // 赋值指纹信息
             return CuckooInsert_Inserted;
         }
         
@@ -38,4 +59,3 @@ static CuckooInsertStatus Filter_KOInsert(CuckooFilter *filter, SubCF *curFilter
     return CuckooInsert_NoSpace;
 }
 ```
-

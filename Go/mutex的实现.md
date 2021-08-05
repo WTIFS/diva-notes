@@ -6,7 +6,7 @@
 // mutex 在第一次使用之后不能进行复制
 type Mutex struct {
 	state int32  // 状态位 
-	sema  uint32 // 信号量，用来控制等待的goroutine 的阻塞，休眠，唤醒
+	sema  uint32 // 信号量，用来控制等待的 goroutine 的阻塞，休眠，唤醒
 }
 
 // 上面 state 的可选值
@@ -48,7 +48,23 @@ func (m *Mutex) Lock() {
 
 #### 慢路径
 
-如果快速路径加锁失败，则进入慢路径，大家排队阻塞等待加锁。
+如果快速路径加锁失败，则进入慢路径，大家排队阻塞等待加锁，每个等待者叫 `waiter`，放入一个队列里等待。
+
+
+
+##### 正常模式
+
+正常模式下 `waiter` 是先入先出，从队列中弹出一个 `waiter` 唤醒后，但该 `waiter` 不会直接获取锁，而是新来的请求锁的 `goroutine` 进行竞争。通常新来的 `goroutine` 更易获取锁（新的 `goroutine` 正在`cpu`上运行，而被唤醒的 `waiter` 还要进行调度才能进入状态），所以 `waiter` 大概率抢不过，这个时候 `waiter` 会被放回队列的头部重新等待，如果等待的时间超过了 `1ms`，这个时候 `Mutex` 就会进入饥饿模式。
+
+
+
+##### 饥饿模式
+
+当 `Mutex` 进入饥饿模式之后，新来的 `goroutine` 会直接放入队列的尾部，不会和老的 `waiter` 竞争，这样很好的解决了老的 `goroutine` 一直抢不到锁的场景。
+
+当队列只剩一个 `goroutine` 并且等待时间没有超过 `1ms`，这个时候 `Mutex` 会重新恢复到正常模式。
+
+
 
 这段代码很难懂，大概能看出分正常模式和饥饿模式两种逻辑。
 
@@ -60,7 +76,8 @@ func (m *Mutex) lockSlow() {
 	iter := 0               // 自旋次数
 	old := m.state          // 当前所的状态
 	for {
-        // 锁处于正常模式还没有释放的时候，尝试自旋
+        // 正常模式
+        // 尝试自旋获取锁
 		if old&(mutexLocked|mutexStarving) == mutexLocked && runtime_canSpin(iter) {		
 		    // 在临界区耗时很短的情况下提高性能
             if !awoke && old&mutexWoken == 0 && old>>mutexWaiterShift != 0 && atomic.CompareAndSwapInt32(&m.state, old, old|mutexWoken) {
@@ -73,7 +90,7 @@ func (m *Mutex) lockSlow() {
 		}
         
 		new := old
-		if old&mutexStarving == 0 { // 非饥饿装进行加锁
+		if old&mutexStarving == 0 { // 非饥饿状态进行加锁
 			new |= mutexLocked
 		}
         
@@ -128,17 +145,7 @@ func (m *Mutex) lockSlow() {
 
 
 
-##### 正常模式
 
-正常模式下 `waiter` 都是先入先出，在队列中等待的 `waiter` 被唤醒后不会直接获取锁，因为要和新来的 `goroutine` 进行竞争，新来的 `goroutine` 相对于被唤醒的`waiter` 是具有优势的，新的 `goroutine` 正在`cpu`上运行，被唤醒的 `waiter` 还要进行调度才能进入状态，所以在并发的情况下 `waiter` 大概率抢不过新来的`goroutine`，这个时候 `waiter` 会被放到队列的头部，如果等待的时间超过了 `1ms`，这个时候 `Mutex` 就会进入饥饿模式。
-
-
-
-##### 饥饿模式
-
-当 `Mutex` 进入饥饿模式之后，锁的所有权会从解锁的 `goroutine` 移交给队列头部的 `goroutine`，这几个时候新来的 `goroutine` 会直接放入队列的尾部，这样很好的解决了老的 `goroutine` 一直抢不到锁的场景。
-
-对于两种模式，正常模式下的性能是最好的，`goroutine` 可以连续多次获取锁，饥饿模式解决了取锁公平的问题，但是性能会下降，其实是性能和公平的一个平衡模式。所以在 `lock` 的源码里面，当队列只剩一个 `goroutine` 并且等待时间没有超过 `1ms`，这个时候 `Mutex` 会重新恢复到正常模式。
 
 
 

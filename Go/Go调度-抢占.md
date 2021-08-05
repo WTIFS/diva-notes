@@ -61,7 +61,7 @@ func main() {
 // success
 ```
 
-这段代码在 go 1.14 中可以正常执行，但 go 1.13 中则会卡住。因为之前版本得执行函数时才会检查调度，对于 `f2` 里这种简单的 `for` 循环则无能为力。
+这段代码在 `go 1.14` 中可以正常执行，但 `go 1.13` 中则会卡住。因为之前版本得执行函数时才会检查调度，对于 `f2` 里这种简单的 `for` 循环则无能为力。
 
 
 
@@ -84,16 +84,16 @@ func main() {
 - 抢占请求需要满足 2个条件中的1个：
     1. G进行系统调用超过20us
     2. G运行超过10ms。
-- 调度器在启动的时候会启动一个单独的线程sysmon，它负责所有的监控工作，其中1项就是抢占，发现满足抢占条件的 `G` 时，就发出抢占请求。
+- 调度器在启动的时候会启动一个单独的线程 `sysmon`，它负责所有的监控工作，其中1项就是抢占，发现满足抢占条件的 `G` 时，就发出抢占请求。
 
 
 
 ### 实现机制
 
 - 编译阶段，编译器会在一些有明显消耗的函数头部插入一些栈增长检测代码，用来做扩栈和调度相关的判断。
-- 函数执行时，通过检测 `g.stackguard0==0`，来判断是否要扩栈。该标志也用来判断是否该做调度，如果 `g.stackguard0 == stackPreempt`，则执行调度。
-  - 调度时还会检查 `gcwating` 标志，如果 `gcwating==1`, (表示 `GC` 正在等待执行 `STW` 操作)，便会让出当前 `P`
-- 因此，对于非函数调用 (例如某个 `G` 执行的是简单 `for` 循环)，即使设置了抢占标志，该 `G` 也会一直霸占 `M` ，无法完成调度
+- 函数执行时，通过检测 `g.stackguard0 == 0`，来判断是否要扩栈。该标志也用来判断是否该做调度，如果 `g.stackguard0 == stackPreempt`，则执行调度。
+  - 调度时还会检查 `gcwating` 标志，如果 `gcwating == 1`, (表示 `GC` 正在等待执行 `STW` 操作)，便会让出当前 `P`
+- 因此，对于非函数调用 (例如某个 `G` 执行的是简单 `for` 循环)，即使设置了抢占标志，该 `G` 也不会执行栈扩容检测，就会一直霸占 `M` ，无法完成调度
 
 
 
@@ -103,15 +103,17 @@ func main() {
 
 - 程序启动时，会注册函数，监听 `SIGURG` 信号并绑定处理方法 `runtime.doSigPreempt`
 - 需要调度时，发送 `SIGURG` 信号
-- 监听函数收到 `SIGURG` 信号，执行调度
+- 监听函数收到 `SIGURG` 信号，执行调度 `schedule()`
 
 
 
 ## 调度时机
-1. Go 后台监控 `runtime.sysmon` 检测超时发送抢占信号
-2. Go GC 栈扫描发送抢占信号
-   1. 对 GC Root 进行标记的时候会扫描 G 的栈，扫描之前会调用 `suspendG` 挂起 G 的执行才进行扫描，扫描完毕之后再次调用 `resumeG` 恢复执行。
-3. Go GC STW 的时候调用 `preemptall` 抢占所有 P，让其暂停
+1. `Go` 后台监控 `runtime.sysmon` 检测超时发送抢占信号
+2. `Go GC` 栈扫描发送抢占信号
+   - 对 `GC Root` 进行标记的时候会扫描 `G` 的栈，扫描之前会调用 `suspendG` 挂起 `G` 的执行才进行扫描
+   - 会将处于运行状态的 `G` 的 `preemptStop` 标记成为 `true`，并调用 `runtime.preemptM` 会调用 `runtime.signalM` 向线程发送信号 `SIGURG`
+   - 扫描完毕之后再次调用 `resumeG` 恢复执行。
+3. `Go GC STW` 的时候调用 `preemptall` 抢占所有 `P`，让其暂停
 
 
 
@@ -271,6 +273,10 @@ func asyncPreempt2() {
 }
 ```
 
+> 问题：`sighandler` 里的 `g` 是哪里的 `G`？
+
+
+
 
 
 ## 收到信号后的处理
@@ -281,18 +287,18 @@ func asyncPreempt2() {
 // runtime/proc.go
 // preemptPark parks gp and puts it in _Gpreempted.
 func preemptPark(gp *g) {
-	casGToPreemptScan(gp, _Grunning, _Gscan|_Gpreempted)     //修改G的状态为抢占中
-	dropg()                                                  //解绑M和G
-	casfrom_Gscanstatus(gp, _Gscan|_Gpreempted, _Gpreempted) //修改G的状态为被抢占
-	schedule()                                               //调度
+	casGToPreemptScan(gp, _Grunning, _Gscan|_Gpreempted)     // 修改 G 的状态为抢占中
+	dropg()                                                  // 解绑 M 和 G
+	casfrom_Gscanstatus(gp, _Gscan|_Gpreempted, _Gpreempted) // 修改 G 的状态为被抢占
+	schedule()                                               // 调度
 }
 
-//解绑M和G
+// 解绑 M 和 G
 func dropg() {
 	_g_ := getg()
 
-	setMNoWB(&_g_.m.curg.m, nil) //将G的M设置为nil
-	setGNoWB(&_g_.m.curg, nil)   //将M的curg设置为nil
+	setMNoWB(&_g_.m.curg.m, nil) // 将 G 的 M 设置为 nil
+	setGNoWB(&_g_.m.curg, nil)   // 将 M 的 curg 设置为 nil
 }
 ```
 

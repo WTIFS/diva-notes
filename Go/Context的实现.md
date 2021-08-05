@@ -98,7 +98,9 @@ func (c *cancelCtx) cancel(removeFromParent bool, err error) {
 ```
 
 
+
 ### WithCancel
+
 ```go
 // 新建一个cancel context
 func WithCancel(parent Context) (ctx Context, cancel CancelFunc) {
@@ -211,7 +213,7 @@ func (c *conn) serve(ctx context.Context) {
   
     ctx, cancelCtx := context.WithCancel(ctx)
     c.cancelCtx = cancelCtx
-      defer cancelCtx()
+    defer cancelCtx()
   
     for {
         w, err := c.readRequest(ctx)
@@ -242,8 +244,8 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 
 另外有两点值得注意：
 
-1. `context` 的取消是柔性的，上游任务仅仅使用 `context` 通知下游不再需要，不会直接干涉和中断下游任务的执行，由下游任务自行处理取消逻辑。
-2. `context `是线程安全的，其本身是不可变的（immutable），且并发情况下会加锁。
+1. `context` 的取消是柔性的，上游任务仅仅使用 `context` 通知下游不再需要，不会直接干涉和中断下游任务的执行，由下游任务自行处理取消逻辑，下游自己写 `select <- ctx.Done()` 的逻辑。
+2. `context ` 是线程安全的，其本身是不可变的（immutable），且并发情况下会加锁。
 
 
 

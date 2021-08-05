@@ -163,9 +163,7 @@ func (pc *persistConn) readLoop() {
 }
 ```
 
-简单来说 `readLoop` 就是一个死循环，只要 `alive` 为 `true`，循环就不会中断
-
-`select` 里是 `goroutine` 有可能退出的场景：
+简单来说 `readLoop` 就是一个死循环，只要不满足以下的退出场景， `alive` 就为 `true`，循环就不会中断：
 
 - `body` 被读取完毕或 `body` 关闭
 - `request` 主动 `cancel`
@@ -174,14 +172,16 @@ func (pc *persistConn) readLoop() {
 
 
 
-其中第一个 `body` 被读取完或关闭的这个case里，`bodyEOF` 来源于一个通道 `waitForBodyRead`，这个字段的 `true` 和 `false` 直接决定了 `alive` 变量的值。这个通道的值是从上面的 `body` 部分里来的。
+其中第一个 `body` 被读取完或关闭的这个 `case` 里，`bodyEOF` 来源于一个通道 `waitForBodyRead`，这个字段的 `true` 和 `false` 直接决定了 `alive` 变量的值。这个通道的值是从上面的 `body` 部分里来的。
 
 - 如果执行 `earlyCloseFn` ，`waitForBodyRead` 通道输入的是 `false`，`alive` 也会是 `false`，那 `readLoop()` 这个 `goroutine` 就会退出。
 - 如果执行 `fn` ，其中包括正常情况下 `body` 读完数据抛出 `io.EOF` 时的 `case`，`waitForBodyRead` 通道输入的是 `true`，那 `alive` 会是 `true`， `readLoop()` 这个 `goroutine` 就不会退出，同时还顺便执行了 `tryPutIdleConn(trace)` 。
 
 
 
-#### 什么时候会执行这个 `fn` 和 `earlyCloseFn` 呢？
+#### 什么时候会执行这个 fn 和 earlyCloseFn 呢？
+
+正常读取 `res.Body` 会触发 `fn`，`res.Body.Close` 会触发 `earlyCloseFn`
 
 **earlyCloseFn**
 

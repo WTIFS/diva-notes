@@ -1,6 +1,6 @@
 #### Gosched
 
-可被用户调用的 `runtime.Gosched` 可将当前 `G` 任务暂停，放回全局队列等待调度，让出当前 `M` 去执行其他任务。
+用户可以通过在代码里调用 `runtime.Gosched()` 来触发调度。该函数可将当前 `G` 任务暂停，放回全局队列等待调度，让出当前 `M` 去执行其他任务。
 
 ```go
 // runtime/proc.go
@@ -46,11 +46,12 @@ func goschedImpl(gp *g) {
 在 `Linux` 下，`notesleep` 是基于 `Futex` 的高性能实现。
 
 > Futex是一种用户态和内核态混合的同步机制。
+>
 > 首先，同步的进程间通过mmap共享一段内存，futex变量就位于这段共享的内存中且操作是原子的。
 >
 > 当进程尝试进入/退出互斥区的时候，先去查看共享内存中的futex变量，如果没有竞争发生，则只修改futex，不用执行系统调用。
 >
-> 当通过访问futex变量告诉进程有竞争发生，则还是得执行系统调用去完成相应的处理(wait 或者 wake up)。
+> 当通过访问futex变量告诉进程有竞争发生，则还是得执行系统调用去完成相应的处理 (wait 或者 wake up)。
 >
 > 简单的说，futex就是通过在用户态的检查，如果了解到没有竞争就不用陷入内核了，大大提高了低竞争时的效率。
 
@@ -69,7 +70,7 @@ func notesleep(n *note) {
 
 #### stopTheWorld
 
-用户逻辑必须暂停在一个安全点上，否则会引发很多意外问题。STW 通过通知机制，让 `G` 主动停止。比如，设置 `gcwaiting=1`让调度函数 `schedule` 主动休眠 `M`；向所有正在运行的 `G` 发出抢占调度信号，使其暂停。
+用户逻辑必须暂停在一个安全点上，否则会引发很多意外问题。STW 通过通知机制，让 `G` 主动停止。比如，设置 `gcwaiting=1` ，再执行调度函数 `schedule()` 休眠 `M`；向所有 `P` 里正在运行的 `G` 发出抢占调度信号，使其暂停。
 
 ```go
 // runtime/proc1.go
@@ -78,9 +79,9 @@ func stopTheWorld(reason string) {
 	  gp := getg()
 	  gp.m.preemptoff = reason 
 	  systemstack(func() {
-				casgstatus(gp, _Grunning, _Gwaiting)  // 设置 G 状态为 waiting
-				stopTheWorldWithSema()                // 实际STW函数
-				casgstatus(gp, _Gwaiting, _Grunning)  // 恢复 G 状态
+			casgstatus(gp, _Grunning, _Gwaiting)  // 设置 G 状态为 waiting
+			stopTheWorldWithSema()                // 实际STW函数
+			casgstatus(gp, _Gwaiting, _Grunning)  // 恢复 G 状态
 	})
 }
 

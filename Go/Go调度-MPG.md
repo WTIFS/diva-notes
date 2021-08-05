@@ -83,7 +83,7 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 原来是一把大锁，锁定了全局协程队列这样一个共享资源，导致了很多激烈的锁竞争。如果我们要优化，很自然的就能想到，把锁的粒度细化来提高减少锁竞争，也就是把全局队列拆成局部队列。
 
 
-支撑整个调度器的主要有 4 个结构，分别是 `M、G、P、Schedt(schedule)`，前三个定义在 `runtime.h` 中，`Sched` 定义在 `proc.c` 中。
+支撑整个调度器的主要有 4 个结构，分别是 `M、G、P、Schedt(schedule)`，前三个定义在 `runtime.h` 中，`Schedt` 定义在 `proc.c` 中。
 
 
 
@@ -107,12 +107,12 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 ```go
 // runtime/runtime2.go
 type g struct {
-    stack       stack      // 当前 Goroutine 的栈内存范围 [stack.lo, stack.hi) 
-    stackguard0 uintptr    // 一个警戒指针，用来判断栈容量是否需要扩张
-    m           *m         // 当前 Goroutine 绑定的 M
-    sched       gobuf      // 调度相关的数据，上下文切换时就更新这个
-    preempt     bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
-	timer       *timer     // 给 time.Sleep 用的 timer
+    stack        stack      // 当前 Goroutine 的栈内存范围 [stack.lo, stack.hi) 
+    stackguard0  uintptr    // 一个警戒指针，用来判断栈容量是否需要扩张
+    m            *m         // 当前 Goroutine 绑定的 M
+    sched        gobuf      // 调度相关的数据，上下文切换时就更新这个
+    preempt      bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
+	timer        *timer     // 给 time.Sleep 用的 timer
   
   	_panic       *_panic   // panic链表
 	_defer       *_defer   // defer链表
@@ -136,7 +136,7 @@ type sudog struct {
 
 
 
-## M (Machine) 内核级线程
+## M (Machine) 线程
 
 - 一个 `M` 就是一个用户级线程
 - `M` 是一个很大的结构，里面维护小对象内存 `cache`、当前执行的`goroutine`、随机数发生器等等非常多的信息。
@@ -156,12 +156,12 @@ type m struct {
     oldp          puintptr // 上一个运行的 P
   
     locks      int32  // 表示该 M 是否被锁，M 被锁的状态下该 M 无法执行 GC
-    spinning   bool   // 是否自旋，自旋就表示M正在找G来运行。自旋状态的 `M` = 正在找工作 = 空闲的 `M`
-    blocked    bool   // m是否被阻塞
+    spinning   bool   // 是否自旋，自旋就表示 M 正在找 G 来运行。自旋状态的 M = 正在找工作 = 空闲的 M
+    blocked    bool   // M 是否被阻塞
 }
 ```
 
-`M` 并没有像 `G` 和 `P` 一样的状态标记, 但可以认为一个 `M` 有以下的状态:
+`M` 并没有像 `G` 和 `P` 一样的状态标记，但可以认为一个 `M` 有以下的状态:
 
 1. 自旋中 `spinning`: `M` 正在从运行队列获取`G`, 这时候 `M` 会拥有一个 `P`
 2. 执行 `go` 代码中:  `M` 正在执行 `go` 代码, 这时候 `M` 会拥有一个 `P`
@@ -174,7 +174,10 @@ type m struct {
 
 
 
+
+
 ## P (Processor)，处理器
+
 - `P` 是线程 `M` 和 `G` 的中间层，用于调度 `G` 在 `M` 上执行。
 - `P` 自身是用一个全局数组 `allp` 来保存的，长度默认为 `GOMAXPROCS`
 - 它的主要用途就是用来执行 `goroutine` 的，所以它维护了一个本地 `G` 队列，里面存储了所有需要它来执行的 `goroutine`。
@@ -200,7 +203,7 @@ type p struct {
 		n int32
 	}
 
-	sudogcache []*sudog    // sudog 缓存池。二级缓存，优先从这里复用，再用 schedt 里的
+	sudogcache []*sudog     // sudog 缓存池。二级缓存，优先从这里复用，再用 schedt 里的
 	sudogbuf   [128]*sudog
 }
 
@@ -208,6 +211,8 @@ var (
     allp []*p               // 全局 P 数组
 )
 ```
+
+
 
 
 
@@ -594,11 +599,8 @@ func globrunqget(_p_ *p, max int32) *g {
 - 新建 `M` 后，`mstart` 里触发 `schedule`
 - 新建 `G` 后（`go func`）
 - 阻塞性系统调用，比如文件 IO，网络IO
-  - Golang 重写了所有系统调用，在系统调用里加入了调度逻辑（更改 `G`状态、`M` 和`P` 解绑、 `schedule `等）
-- time系列定时操作
-  - `time.Sleep` 会调用 `gopark`、`goready` 等
-- `automic`、锁、管道读写等导致的阻塞，会触发 `gopark`
-- 垃圾回收之后
+  - `Golang` 重写了所有系统调用，在系统调用里加入了调度逻辑（更改 `G`状态、`M` 和`P` 解绑、 `schedule `等）
+- `sysmon` 会定期检查运行超长的任务，进行调度
 - 主动调用 `runtime.Gosched()`，这个很少见，一般调试才用
 
 

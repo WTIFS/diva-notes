@@ -25,22 +25,14 @@ type hmap struct {
     noverflow uint16 // 溢出的 bucket 个数
     hash0     uint32 // 哈希种子
 
-    buckets    unsafe.Pointer // 指向 buckets 数组，大小为 2^B
+    buckets    unsafe.Pointer // 指向桶数组，大小为 2^B
     oldbuckets unsafe.Pointer // 旧桶的地址，用于扩容
     nevacuate  uintptr        // 指示扩容进度，小于此地址的 buckets 迁移完成
     overflow *[2]*[]*bmap     // map 里不含指针时，用这个存 buckets 和 oldbuckets 的溢出区，保证溢出区在扫描时能被扫到
 }
 ```
 
-`buckets` 是一个指针，最终它指向的是一个结构体：
-
-```golang
-type bmap struct {
-	tophash [bucketCnt]uint8
-}
-```
-
-但这只是表面 (`src/runtime/hashmap.go`) 的结构，编译期间会给它加料，动态地创建一个新的结构：
+`buckets` 是一个指针，指向的是一个桶数组，每个桶是个 `bmap` 链表：
 
 ```golang
 type bmap struct {
@@ -48,7 +40,7 @@ type bmap struct {
     keys     [8]keytype   // 8个key
     values   [8]valuetype // 8个value
     pad      uintptr
-    overflow uintptr      // 如果桶里的元素超过8个，那就需要再构建一个桶，这个字段会指向这个新桶，相当于多个桶用链表串起来
+    overflow uintptr      // 如果bmap里的元素超过8个，那就需要再构建一个bmap，这个字段会指向这个新bmap，相当于多个bmap用链表串起来
 }
 ```
 
@@ -86,6 +78,10 @@ hash高5位   hash                                                  hash低5位
 再用哈希值的高 `8` 位，快速比较，找到此 `key` 在 `bucket` 中的位置。如果找到一样的，再进一步比较 `key` 的原值。
 
 如果在 `bucket` 中没找到，并且 `overflow` 不为空，还要继续去 `overflow bucket` 中寻找。
+
+> 为什么是 `2^B` 个桶？
+>
+> 这样 `hash % 2^B`  等价于 `hash & 1<<B -1`，可以直接通过与操作的到桶下标；扩容时也只需判断扩容多出来的二进制位，详见后面。
 
 ```go
 func mapaccess1(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
@@ -404,7 +400,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 理解了上面 `bucket` 序号的变化，我们就可以回答另一个问题了：为什么遍历 `map` 是无序的？
 
 1. `map` 根本就没有维护 `key` 的顺序，计算 `key` 的桶时是用 `hash` 算的，本来有序的 `key`，`hash` 后就无序了。
-2. `map` 在扩容后，会发生 `key` 的搬迁，原来落在同一个 `bucket` 中的 `key`，搬迁后，有些 `key` 就要远走高飞了（`bucket` 序号加上了 `2^B`）。因此，遍历、修改`map`、再遍历，两次得到的遍历顺序就可能不一样了。
+2. `map` 在扩容后，会发生 `key` 的搬迁，原来落在同一个 `bucket` 中的 `key`，搬迁后，有些 `key` 就要远走高飞了（`bucket` 序号加上了 `2^B`）。因此，遍历、修改 `map`、再遍历，两次得到的遍历顺序就可能不一样了。
 
 当然，`Go` 做得更绝，遍历 `map` 时，并不是固定地从 `0` 号 `bucket` 开始遍历，而是通过 `fastrand` 算了个随机数，从一个随机 `bucket` 开始，并且是从这个 `bucket` 的随机 `cell` 开始遍历。特意设计成了无序迭代的结果。
 
@@ -436,7 +432,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 # 总结
 
-总结一下，`Go` 语言中，通过哈希查找表实现 `map`，用链表法解决哈希冲突。利用将 8个 `key` / 8个`value` 依次防止的做饭减少了对齐所需的空间。
+总结一下，`Go` 语言中，通过哈希查找表实现 `map`，用链表法解决哈希冲突。利用将 8个 `key` / 8个`value` 依次防止的做法减少了对齐所需的空间。
 
 通过 `key` 的哈希值将 `key` 散落到不同的桶中。比如说有 `2^5=32` 个桶，就用哈希值的低 `5` 位判断落入哪个桶。
 
@@ -445,7 +441,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 - 对前一种情况，加桶的个数就可以了，对应的是 `2` 倍容量的 **增量扩容**，扩容期间需要 `rehash` 重新分桶。
 - 后者是由于大量写入和删除元素造成的数据空洞，只需要重新整理下溢出桶里的数据就可以，称为 **等量扩容**。
 
-扩容过程是渐进的，主要是防止一次扩容需要搬迁的 `key` 数量过多，引发性能问题。触发扩容的时机是增加了新元素，搬迁的时机则发生在赋值/删除期间，每次最多搬迁两个 `bucket`（这里存疑，代码里只看到一个）。
+扩容过程是渐进的，主要是防止一次扩容需要搬迁的 `key` 数量过多，引发性能问题。触发扩容的时机是增加了新元素，搬迁的时机则发生在赋值/删除期间，每次最多搬迁两个 `bucket`。
 
 
 
@@ -459,11 +455,9 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 
 
-##### map的iterator是否安全？
+##### map 的 iterator 是否安全？
 
-`map` 的 `delete` 并非真的 `delete`，所以对迭代器是没有影响的，是安全的。
-
-
+`for k, v := range map` 会复制 `map` 的 `key` 和 `value`，迭代期间修改 `map` 不会影响 `range` 里的 `value`，但会影响 `map[k]` 得到的数据。
 
 
 

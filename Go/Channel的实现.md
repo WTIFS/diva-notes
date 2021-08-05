@@ -42,21 +42,21 @@
 
 type hchan struct {
 	qcount   uint           // 当前队列里的元素个数
-	dataqsiz uint           // 环形队列长度，即缓冲区的大小，即make(chan T, N) 中的N
-	buf      unsafe.Pointer // points to an array of dataqsiz elements 环形队列指针
+	dataqsiz uint           // 环形队列长度，即缓冲区的大小，即 make(chan T, N) 中的 N
+	buf      unsafe.Pointer // 环形队列
 	elemsize uint16         // 每个元素的大小
 	closed   uint32         // 标识当前通道是否处于关闭状态，创建通道后，该字段设置0，即打开通道；通道调用close将其设置为1，通道关闭
-	elemtype *_type         // element type 元素类型，用于数据传递过程中的赋值
-	sendx    uint           // send index 环形缓冲区的状态字段，它只是缓冲区的当前索引-支持数组，它可以从中发送数据
-	recvx    uint           // receive index 环形缓冲区的状态字段，它只是缓冲区当前索引-支持数组，它可以从中接受数据
+	elemtype *_type         // 元素类型，用于数据传递过程中的赋值
+	sendx    uint           // 环形队列尾指针
+	recvx    uint           // 环形队列头指针
 
-	recvq waitq // list of recv waiters 等待读消息的goroutine队列
-	sendq waitq // list of send waiters 等待写消息的goroutine队列
+	recvq waitq             // 等待读消息的goroutine队列
+	sendq waitq             // 等待写消息的goroutine队列
 
 	lock mutex //互斥锁，为每个读写操作锁定通道，因为发送和接受必须是互斥操作
 }
   
-// sudog 代表goroutine
+// sudog 代表 goroutine
 type waitq struct {
         first *sudog //这个是链表，通过next指向下一个sudog
         last  *sudog //链表尾部
@@ -69,13 +69,13 @@ type waitq struct {
 
 1. 锁定整个通道结构
 2. 如果 `recvq` 中有等待读的 `goroutine`，则直接将元素写入该 `goroutine` (取出G、写入G、唤醒G)
-    1. 这步节省了一个锁和内存copy的步骤。一般共享内存是：G1加锁、G1写入堆、G1解锁；G2加锁、G2读堆、G2解锁
+    1. 这步节省了一个锁和内存 `copy` 的步骤。一般共享内存是：G1加锁、G1写入堆、G1解锁；G2加锁、G2读堆、G2解锁
     2. 这里直接是：G1加锁、G1写入G2的栈、G1唤醒G2、G1解锁
-3. 如果 `recvq` 为空，则确定缓冲区是否可用，如果可用那么从当前goroutine复制数据到 `buf` 缓冲区中，并增加 `sendx` 下标的值
+3. 如果 `recvq` 为空，则确定缓冲区是否可用，如果可用那么从当前 `goroutine` 复制数据到 `buf` 缓冲区中，并增加 `sendx` 下标的值
 4. 如果缓冲区已经满了，则
     1. 要写入的元素将保存在当前执行的 `goroutine` 结构中，let's say `G1`
     2. 调度器将 `G1` 的状态设置为 `waiting`，移除与线程 `M` 的联系。此时 `G1` 就是阻塞状态
-    3. `G1` 变为 `waiting` 状态后，会创建一个代表自己的 `sudog` 的结构，将数据保存到 `sudog.elem` 字段，然后放到 `sendq` 链表中
+    3. `G1` 变为 `waiting` 状态后，会创建一个代表自己的 `sudog` 的结构，将数据保存到 `sudog.elem` 字段，然后追加到 `sendq` 链表中
 5. 写入完成释放锁
 
 ```go
@@ -171,7 +171,7 @@ func send(c *hchan, sg *sudog, ep unsafe.Pointer, unlockf func(), skip int) {
 3. 尝试从 `sendq` 等待队列中获取等待写的 `goroutine`
 4. 如果有等待的 `goroutine`
     1. 没有缓冲区：取出 `goroutine` 并读取数据，然后唤醒这个 `goroutine`，结束读取释放锁
-    2. 有缓冲区 (有缓冲区的情况下还有等待的 `goroutine`，说明缓冲区此时满了)：从缓冲区队列首取数据，再从 `sendq` 取出一个`goroutine`，将该 `goroutine` 中的数据存放到缓冲队列尾
+    2. 有缓冲区 (有缓冲区的情况下还有等待的 `goroutine`，说明缓冲区此时满了)：从缓冲区队列队头取数据，作为返回的值；再把刚刚 `sendq` 里取出的那个 `goroutine` 放到缓冲队列队尾
 5. 如果没有等待的 `goroutine`
     1. 缓冲区有数据：直接读取缓冲区数据
     2. 没有缓冲区或者缓冲区为空，将当前 `goroutine` 加入到` sendq` 队列，进入睡眠，等待被写入 `goroutine` 唤醒
@@ -285,12 +285,6 @@ func closechan(c *hchan) {
 	if c.closed != 0 {
 		unlock(&c.lock)
 		panic(plainError("close of closed channel"))
-	}
-
-	if raceenabled {
-		callerpc := getcallerpc()
-		racewritepc(c.raceaddr(), callerpc, funcPC(closechan))
-		racerelease(c.raceaddr())
 	}
 
 	c.closed = 1
@@ -413,7 +407,7 @@ type scase struct {
 }
 ```
 
-`select - case` 则会被编译为对 `selectgo` 函数的调用。里面将所有 `case` 组成了一个 `scase` 数组，以随机顺序遍历这个数组，如果能读写数据，就返回；否则新建一个 `sudog` 放到 `scase.c` 这个 `channel `的等待队列里，等待唤醒。如果所有 `scase` 里都没值，则最后执行 `default`。
+`select - case` 则会被编译为对 `selectgo` 函数的调用。里面将所有 `case` 组成了一个 `scase` 数组，以随机顺序遍历这个数组，如果能读写数据，就返回；否则新建一个 `sudog` 放到 `scase.c` 这个 `channel ` 的等待队列里，等待唤醒。如果所有 `scase` 里都没值，则最后执行 `default`。
 
 ```go
 func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, block bool) (int, bool) {
@@ -463,7 +457,7 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 	}
 
 	// 阶段2：所有 case 都阻塞住了，且没有 default
-    // 将 select 挂到所有 case 的等待列表里
+    // 将 select 挂到所有 case 的等待列表里，等待被唤醒
 	gp = getg()
 	nextp = &gp.waiting
 	for _, casei := range lockorder { 

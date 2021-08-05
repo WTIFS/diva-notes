@@ -97,7 +97,7 @@ type _defer struct {
 ```go
 // src/runtime/panic.go
 func deferproc(siz int32, fn *funcval) {  
-  	sp := getcallersp()                                      // 获取 sp 指针
+  	sp := getcallersp()                                      // 获取栈指针
 	argp := uintptr(unsafe.Pointer(&fn)) + unsafe.Sizeof(fn) // fn 函数后紧跟的就是参数列表
 	callerpc := getcallerpc()
 	
@@ -111,7 +111,7 @@ func deferproc(siz int32, fn *funcval) {
     
     // 进行参数拷贝
     switch siz {
-    //如果defered函数的参数只有指针大小则直接通过赋值来拷贝参数
+    // 如果defered函数的参数只有指针大小则直接通过赋值来拷贝参数
     case sys.PtrSize:
         // 将 argp 所对应的值 写入到 deferArgs 返回的地址中
         *(*uintptr)(deferArgs(d)) = *(*uintptr)(unsafe.Pointer(argp))

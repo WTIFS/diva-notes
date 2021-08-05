@@ -3,7 +3,7 @@
   - 一个全局最小堆
     - 最小堆是非常常见的用来管理 `timer` 的数据结构。在最小堆中，作为排序依据的 `key` 是 `timer` 的 `when` 属性，也就是何时触发。即最近一次触发的 `timer` 将会处于堆顶。
   - 再起一个叫 `timeproc` 的协程负责调度 `timer`，持续检查堆顶 `timer`是否到期，并触发对应的回调
-    - `timeproc` 执行时需要阻塞占用 `M`，会挤走 `M` 上本来运行的 `G` 和 `P`，切换代价较高
+    - `timeproc` 执行时需要阻塞（`for` 死循环）占用 `M`，会挤走 `M` 上本来运行的 `G` 和 `P`，切换代价较高
 - `go1.0 ~ go1.13` 
   - 上述方案存在锁竞争；且堆体积较大，插入 / 删除效率低
   - `64` 个全局桶 + 四叉堆
@@ -21,7 +21,7 @@
     - 可以像时分秒的设计一样，使用多层时间轮组合，即可组合表示更多的时间
     - 槽多，可以很大程度减少锁竞争
     - `kafka` 用的就是这种方案
-  - 对于持续性定时的 `ticker` 类型，只需要将其从堆/队列里取出，调整下次到期时间，再放回去即可，类似递归
+  - 对于持续性定时的 `ticker` 类型，只需要将其从堆/队列里取出，调整下次到期时间，再放回去即可，类似永久性递归
 
 
 
@@ -148,7 +148,7 @@ func cleantimers(pp *p) {
 			case timerModifiedEarlier, timerModifiedLater: // timer 被修改到了更早或更晚的时间
 				t.when = t.nextwhen                        // 设置新的 when 字段
 				dodeltimer0(pp)                            // 删除
-        doaddtimer(pp, t)                          // 设置新的 when 字段后重新放回堆
+        		doaddtimer(pp, t)                          // 设置新的 when 字段后重新放回堆
 		}
 	}
 }
@@ -191,15 +191,15 @@ func doaddtimer(pp *p, t *timer) {
 // runtime/time.go
 func runtimer(pp *p, now int64) int64 {
     for {
-        t := pp.timers[0] // 获取最小堆的堆顶元素
+        t := pp.timers[0] // 不断获取最小堆的堆顶元素
       
         // 判断 timer 状态
         switch s := atomic.Load(&t.status); s {
        
             case timerWaiting:                    
-                if t.when > now { return t.when }          // 还没到时间，返回下次执行时间
-                runOneTimer(pp, t, now)                    // 运行该 timer
-                return 0
+                if t.when > now { return t.when }          // 还没到时间，返回下次执行时间，退出循环
+                runOneTimer(pp, t, now)                    // 如果到时间了，则运行该 timer
+                return 0                                   // 这里 return 了？如果有多个定时器定的同一时间咋办？
           
             
             case timerDeleted:                             // 删除           
@@ -232,7 +232,7 @@ func runOneTimer(pp *p, t *timer, now int64) {
     f := t.f                // 回调函数
     arg := t.arg            // 回调函数的参数
     seq := t.seq
-    unlock(&pp.timersLock)  // 这里有点费解，一般是先 lock 再 unlock。这里应该是为了运行回调时不阻塞其他的 timer
+    unlock(&pp.timersLock)  // 这里有点费解，一般是先 lock 再 unlock。这里应该是为了运行较慢的回调时不阻塞其他的 timer，使其他 timer 可以被偷
     f(arg, seq)             // 运行该函数
     lock(&pp.timersLock)
 }
@@ -290,6 +290,8 @@ func sysmon() {
 ```
 
 
+
+另外， `P` 没有 `timer` 了的时候，也会尝试偷窃其余 `P` 的 `timer` 执行。
 
 
 

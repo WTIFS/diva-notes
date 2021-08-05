@@ -64,7 +64,7 @@ type Pool struct {
 
 
 
-再来看下本地对象池 `poolLocal` 的定义：
+再来看下本地对象池 `poolLocal` 的定义，核心结构是一个二维链表：
 
 ```go
 // 每个 P 都会有一个 poolLocal 的本地
@@ -75,7 +75,7 @@ type poolLocal struct {
 
 type poolLocalInternal struct {
 	private interface{} // 单实例变量，优先存取这个变量，如果该变量可以满足情况，则不再深入进行其他的复杂操作。
-	shared  poolChain   // 对象池子链表
+	shared  poolChain   // 对象池子链表，是个二维链表
 }
 
 type poolChain struct { // 链表结构
@@ -224,6 +224,7 @@ func poolCleanup() {
 	}
 
 	oldPools, allPools = allPools, nil // 将 allPools 复制给 oldPools，下一轮清理
+    // 而 allPools 变成空的了，下次 Put 时会把在用的对象放回来
 }
 ```
 

@@ -1,8 +1,8 @@
-kafka 的 ISR（In-Sync Replicas）机制被称为"不丢消息"机制。在说ISR机制前，先讲一下kafka的副本（replica）。
+`kafka` 的 `ISR`（In-Sync Replicas）机制被称为"不丢消息"机制。在说 `ISR` 机制前，先讲一下 `kafka` 的副本（replica）。
 
 
 
-**kafka的Replica**
+##### kafka 的 Replica
 
 1. kafka的topic可以设置有N个副本（replica），副本数最好要小于broker的数量，也就是要保证一个broker上的replica最多有一个，所以可以用broker id指定Partition replica。
 2. 创建副本的单位是topic的分区，每个分区有1个leader和0到多个follower，我们把多个replica分为 `leader replica` 和 `follower replica`。
@@ -11,7 +11,7 @@ kafka 的 ISR（In-Sync Replicas）机制被称为"不丢消息"机制。在说I
 
 **kafka的"同步"**
 
-kafka不是完全同步，也不是完全异步，是一种特殊的ISR（In Sync Replica）
+kafka不是完全同步，也不是完全异步，是一种特殊的 ISR（In Sync Replica）
 
 1. **完全同步复制**要求所有能工作的 follower 都复制完，这条消息才会被认为 commit，这种复制方式极大的影响了吞吐率（高吞吐率是 Kafka 非常重要的一个特性）。
 2. **异步复制方式下**，数据只要被 leader 写入 log 就被认为已经 commit，这种情况下如果 leader 宕机，follower 会丢失数据。
@@ -35,7 +35,7 @@ leader 会追踪 "同步中的" 节点，如果有节点挂了，卡了，或延
 
 需要同步完成的 follower 的数量是由 acks 参数来确定的。
 
-1. 当设定为1的时候仅需要同步给一个 follower 即可
+1. 当设定为 `1` 的时候仅需要同步给一个 follower 即可
 2. 如果为 -1 (all)，则需要同步所有的 follower
 3. 如果为 0 的话就代表不需要同步给 follower，记下消息之后立马返回，这样的吞吐量是最好的，但是对消息的也就不能保证丢了
-4. 其实常规环境对消息丢失要求没有那么严苛的环境还是可以使用的。常规使用最多的环境应该是设置为1，同步一份就ok了
+4. 其实常规环境对消息丢失要求没有那么严苛的环境还是可以使用的。常规使用最多的环境应该是设置为 `1`，同步一份就ok了

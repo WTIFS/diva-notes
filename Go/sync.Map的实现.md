@@ -19,12 +19,12 @@ type Map struct {
     // 当涉及到脏数据(dirty)操作时候，需要使用这个锁
     mu Mutex
     
-    // read是一个只读数据结构，包含一个map结构，
-    // 读不需要加锁，只需要通过 atomic 加载最新的指针即可
-    read atomic.Value // readOnly
+    // read 字段指向下面的 readOnly 结构，里面有个 map
+    // 读/更新不需要加锁，只需要通过 atomic 加载最新的指针即可
+    read atomic.Value 
     
-    // dirty 包含部分map的键值对，如果操作需要mutex获取锁
-    // 最后dirty中的元素会被全部提升到read里的map去
+    // dirty 包含部分 map 的键值对，如果操作需要 mutex 获取锁
+    // 新增键值时写入这个字段
     dirty map[interface{}]*entry
     
     // misses是一个计数器，用于记录read中没有的数据而在dirty中有的数据的数量。
@@ -41,8 +41,8 @@ type Map struct {
 ```go
 // readOnly is an immutable struct stored atomically in the Map.read field.
 type readOnly struct {
-    // m包含所有只读数据，不会进行任何的数据增加和删除操作 
-    // 但是可以修改entry的指针因为这个不会导致map的元素移动
+    // m 包含所有只读数据，不会进行任何的数据增加和删除操作 
+    // 但是可以修改 entry 的指针因为这个不会导致map的元素移动
     m       map[interface{}]*entry
     
     // 标志位，如果为true则表明当前read只读map的数据不完整，dirty map中包含部分数据
@@ -122,7 +122,7 @@ func (m *Map) missLocked() {
 
 ## 新增和更新
 
-对 `read` 中已有的 `key` 做更新，通过 `CAS` 来更新值；
+如果 `read` 中已有 `key`，通过 `CAS` 来更新值；
 
 新增 `key`，或者更新 `dirty` 中的数据，需要加锁并写入 `dirty`
 
@@ -131,7 +131,7 @@ func (m *Map) missLocked() {
 
 // Store sets the value for a key.
 func (m *Map) Store(key, value interface{}) {
-   // 直接在read中查找值，找到了，就尝试 tryStore 更新值, tryStore 里使用 for 循环 + CAS 的方式进行更新
+   // 直接在 read 中查找值，找到了，就尝试 tryStore 更新值, tryStore 里使用 for 循环 + CAS 的方式进行更新
     read, _ := m.read.Load().(readOnly)
     if e, ok := read.m[key]; ok && e.tryStore(&value) {
         return
@@ -140,7 +140,7 @@ func (m *Map) Store(key, value interface{}) {
     // m.read 中不存在
     m.mu.Lock()
     read, _ = m.read.Load().(readOnly)
-    if e, ok := read.m[key]; ok { // double check
+    if e, ok := read.m[key]; ok { // double check，因为 lock 前 read 里可能又有了
         if e.unexpungeLocked() {  // 未被标记成删除
             m.dirty[key] = e      // 加入到dirty里
         }
@@ -175,3 +175,12 @@ func (m *Map) Store(key, value interface{}) {
 5. 延迟删除。 删除一个键值只是打标记 (go的map都是这样，这个不是sync.Map特有的)。只有在迁移dirty数据的时候才清理删除的数据。
 6. 优先从 read 读取、更新、删除，因为对 read 的读取不需要锁。
 7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如 [concurrent-map](https://github.com/orcaman/concurrent-map)
+
+
+
+
+
+## 问题
+
+##### read 里也是 map ，扩容时咋办？不需要加锁吗？
+
