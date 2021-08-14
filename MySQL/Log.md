@@ -168,7 +168,7 @@ type log block struct {
 
 
 #### 日志格式
-`binlog` 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。默认为 `ROW`。
+`binlog` 日志有三种格式，分别为 `STATMENT`、`ROW` 和 `MIXED`。`MySQL 5.7` 后默认为 `ROW`。
 
 - `STATMENT` 
   - 基于 `SQL` 语句的复制  (`statement-based replication, SBR`)，每一条会修改数据的 `SQL` 语句都会记录到 binlog 中 
@@ -181,7 +181,7 @@ type log block struct {
   - 缺点：会产生大量的日志，尤其是 `ALTEWR TABLE` 的时候会让日志暴涨
 
 - `MIXED` 
-  - 基于`STATMENT`和`ROW`两种模式的混合复制 (`mixed-based replication, MBR`)，一般的复制使用 `STATEMENT`模式，对 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存
+  - 基于 `STATMENT` 和 `ROW`两种模式的混合复制 (`mixed-based replication, MBR`)，一般的复制使用 `STATEMENT`模式，对 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存
 
 
 
