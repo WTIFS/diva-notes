@@ -9,6 +9,8 @@
 
 
 
+
+
 #### kafka 的 "同步"
 
 `kafka` 不是完全同步，也不是完全异步，是一种特殊的 ISR（In Sync Replica）。`ISR` 机制权衡了性能与可用性。
@@ -16,6 +18,20 @@
 `ISR` 表示和 `leader` 保持同步状态的 `follower` 集合。这里 "同步" 的定义可以配置，默认是 `follower` 落后 `master` 的进度在 10秒 以内。
 
 每次 `follower` 来拉数据时， `leader` 会记录各 `follower` 的同步进度，动态维护 `ISR`。`follower` 落后的时长、落后的消息数、`ISR` 的数量都可以配置。
+
+
+
+
+
+#### 主从同步
+
+<img src="https://pic2.zhimg.com/v2-4d4a6c0ae7218d8fc0659652eab347a5_b.jpg" alt="img" style="zoom:50%;" />
+
+- 共有7条消息，`offset` (消息偏移量) 分别是 0~6
+- 0 代表这个日志文件的开始
+- `HW (High Watermark)` 为4，0~3 代表这个日志文件可以消费的区间 / `follower` 已同步的偏移量，消费者只能消费到这四条消息
+- `LEO` 代表即将要写入消息的偏移量 `offset``
+- `follower` 拉取数据时，会更新 `leader` 的 `HW`，消费者只能消费 `HW` 前的数据
 
 
 
