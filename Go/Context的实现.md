@@ -32,7 +32,7 @@ type canceler interface {
 
 
 
-库里头提供了4个`Context`实现，来供大家玩耍
+库里头提供了4个`Context` 实现，来供大家玩耍
 
 ```go
 // 完全空的Context，用作树的根节点，其实是个int

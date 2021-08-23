@@ -79,7 +79,7 @@ func stopTheWorld(reason string) {
 	  gp := getg()
 	  gp.m.preemptoff = reason 
 	  systemstack(func() {
-			casgstatus(gp, _Grunning, _Gwaiting)  // 设置 G 状态为 waiting
+			casgstatus(gp, _Grunning, _Gwaiting)  // 设置当前 G 状态为 waiting
 			stopTheWorldWithSema()                // 实际STW函数
 			casgstatus(gp, _Gwaiting, _Grunning)  // 恢复 G 状态
 	})
