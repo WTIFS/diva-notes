@@ -175,7 +175,7 @@ func (pc *persistConn) readLoop() {
 其中第一个 `body` 被读取完或关闭的这个 `case` 里，`bodyEOF` 来源于一个通道 `waitForBodyRead`，这个字段的 `true` 和 `false` 直接决定了 `alive` 变量的值。这个通道的值是从上面的 `body` 部分里来的。
 
 - 如果执行 `earlyCloseFn` ，`waitForBodyRead` 通道输入的是 `false`，`alive` 也会是 `false`，那 `readLoop()` 这个 `goroutine` 就会退出。
-- 如果执行 `fn` ，其中包括正常情况下 `body` 读完数据抛出 `io.EOF` 时的 `case`，`waitForBodyRead` 通道输入的是 `true`，那 `alive` 会是 `true`， `readLoop()` 这个 `goroutine` 就不会退出，同时还顺便执行了 `tryPutIdleConn(trace)` 。
+- 如果执行 `fn` ，其中包括正常情况下 `body` 读完数据抛出 `io.EOF` 时的 `case`，`waitForBodyRead` 通道输入的是 `true`，那 `alive` 会是 `true`， `readLoop()` 这个 `goroutine` 就不会退出，同时还顺便执行了 `tryPutIdleConn(trace)` 。会导致内存泄露。
 
 
 
@@ -203,7 +203,7 @@ func (es *bodyEOFSignal) Close() error {
 
 上面这个其实就是我们比较收悉的 `resp.Body.Close()` ，在里面会执行 `earlyCloseFn`。
 
-是此时 `readLoop()` 里的 `waitForBodyRead` 通道输入的是 `false`，`alive` 也会是 `false`，那 `readLoop()` 这个 `goroutine` 就会退出，`goroutine` 不会泄露。
+此时 `readLoop()` 里的 `waitForBodyRead` 通道输入的是 `false`，`alive` 也会是 `false`，那 `readLoop()` 这个 `goroutine` 就会退出，`goroutine` 不会泄露。
 
 
 
@@ -244,7 +244,7 @@ func (es *bodyEOFSignal) condfn(err error) error {
 
 上面这个其实就是我们比较收悉的读取 `body` 里的内容。 `ioutil.ReadAll()` , 在读完 `body` 的内容时会执行 `fn`。
 
-是此时 `readLoop()` 里的 `waitForBodyRead` 通道输入的是 `true`，`alive` 也会是 `true`，那 `readLoop()` 这个 `goroutine` 就不会退出，`goroutine` 会泄露，然后执行 `tryPutIdleConn(trace)` 把连接放回池子里复用。
+此时 `readLoop()` 里的 `waitForBodyRead` 通道输入的是 `true`，`alive` 也会是 `true`，那 `readLoop()` 这个 `goroutine` 就不会退出，`goroutine` 会泄露，然后执行 `tryPutIdleConn(trace)` 把连接放回池子里复用。
 
 
 
