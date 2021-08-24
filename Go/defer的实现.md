@@ -141,7 +141,7 @@ func deferreturn(arg0 uintptr) {
     switch d.siz {
     case sys.PtrSize:
       	// 将 defer 保存的参数复制出来
-     	  // arg0 实际上是 caller SP 栈顶地址值，所以这里实际上是将参数复制到 caller SP 栈顶地址值
+     	// arg0 实际上是 caller SP 栈顶地址值，所以这里实际上是将参数复制到 caller SP 栈顶地址值
       	*(*uintptr)(unsafe.Pointer(&arg0)) = *(*uintptr)(deferArgs(d))
     default:
         // 如果参数大小不是 sys.PtrSize，那么进行数据拷贝

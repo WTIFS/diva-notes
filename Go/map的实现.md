@@ -17,7 +17,6 @@
 
 ```go
 // src/runtime/hashmap.go
-
 type hmap struct {
     count     int    // 元素个数，调用 len(map) 时，直接返回此值
     flags     uint8  // 并发读写的状态标志，如果 =1 时读写这个 map，会 panic
@@ -32,7 +31,7 @@ type hmap struct {
 }
 ```
 
-`buckets` 是一个指针，指向的是一个桶数组，每个桶是个 `bmap` 链表：
+`buckets` 是一个指针，指向的是一个 `bmap` 数组。下文统一将这个数组称为**"仓"**。一个仓由一个 `bmap` 链表构成，下文将 `bmap` 称为**"桶"**：
 
 ```golang
 type bmap struct {
@@ -64,7 +63,7 @@ type bmap struct {
 
 # 查找
 
-`key` 经过哈希计算后得到哈希值，共 `64` 个 `bit` 位（`32` 位机不讨论了），计算它到底要落在哪个桶时，只会用到最后 `B` 个 `bit` 位。还记得前面提到过的 `B` 吗？如果 `B = 5`，那么桶的数量，也就是 `buckets` 数组的长度是 `2^5 = 32`。
+`key` 经过哈希计算后得到哈希值，共 `64` 个 `bit` 位（`32` 位机不讨论了），计算它到底要落在哪个仓时，只会用到最后 `B` 个 `bit` 位。还记得前面提到过的 `B` 吗？如果 `B = 5`，那么仓的数量，也就是 `buckets` 数组的长度是 `2^5 = 32`。
 
 例如，现在有一个 `key `经过哈希函数计算后，得到的哈希结果是：
 
@@ -73,15 +72,15 @@ hash高5位   hash                                                  hash低5位
 10010111  | 000011110110110010001111001010100010010110010101010 │ 01010
 ```
 
-用最后的 `5` 个 `bit` 位 `01010` 作为桶下标，也就是 `10` 号桶。
+用最后的 `5` 个 `bit` 位 `01010` 作为仓下标，也就是 `10` 号仓。
 
-再用哈希值的高 `8` 位，快速比较，找到此 `key` 在 `bucket` 中的位置。如果找到一样的，再进一步比较 `key` 的原值。
+再用哈希值的高 `8` 位，快速比较该仓内的桶，找到此 `key` 在桶中的位置。如果找到一样的，再进一步比较 `key` 的原值。
 
-如果在 `bucket` 中没找到，并且 `overflow` 不为空，还要继续去 `overflow bucket` 中寻找。
+如果在桶中没找到，并且 `overflow` 不为空，还要继续去桶链表里的下一个，即溢出桶中寻找。
 
-> 为什么是 `2^B` 个桶？
+> 为什么是 `2^B` 个仓？
 >
-> 这样 `hash % 2^B`  等价于 `hash & 1<<B -1`，可以直接通过与操作的到桶下标；扩容时也只需判断扩容多出来的二进制位，详见后面。
+> 这样取低 `B` 位和高 `B` 位，可以直接通过位移或与操作得到仓下标，计算简单快速，不用取模；扩容时也只需判断扩容多出来的二进制位，详见后面。
 
 ```go
 func mapaccess1(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
@@ -153,9 +152,19 @@ string	   mapaccess1_faststr(t *maptype, h *hmap, ky string) unsafe.Pointer
 如果遇到 `map` 正在扩容的情况，那查找之前还要先判读一下 `key` 是在新桶里还是旧桶里。
 
 ```go
-m := 2^B -1 // mask
-b := (*bmap)(add(h.buckets, (hash&m) + uintptr(t.bucketsize))
+hash := t.hasher(key, uintptr(h.hash0))
+m := bucketMask(h.B)
+b := (*bmap)(add(h.buckets, (hash&m)*uintptr(t.bucketsize)))
+if c := h.oldbuckets; c != nil {
+	if !h.sameSizeGrow() { // 如果是增量扩容，m减半
+	m >>= 1                // m /= 2
+}
+oldb := (*bmap)(add(c, (hash&m)*uintptr(t.bucketsize)))
+if !evacuated(oldb) { // evacuated 标记仓是否完成迁移。如果 hash 所在的仓尚未完成搬迁，就去旧仓里查找
+    b = oldb
+}
 ```
+
 
 
 
@@ -165,7 +174,7 @@ b := (*bmap)(add(h.buckets, (hash&m) + uintptr(t.bucketsize))
 
 ### 时机
 
-可以看到，同一个桶内，所有元素是组成链表连接起来的。如果一个某个桶内的链表元素过多，会导致查询性能下降。
+可以看到，同一个仓内，所有桶是组成链表连接起来的。查找时需要先定位仓，再遍历桶。如果一个仓内的桶过多，会导致查询性能下降。
 
 因此，需要有一个指标来衡量前面描述的情况，这就是**负载因子**。`Go` 里的 **负载因子** = **元素个数 / 桶数**
 
@@ -176,15 +185,15 @@ loadFactor := count / (2^B)
 扩容的时机：在向 `map` 插入新 `key` 的时候，会进行条件检测，符合下面这 2 个条件，就会触发扩容：
 
 1. 装载因子超过阈值，源码里定义的阈值是 `6.5`。
-2. 溢出的桶数量过多（作为对第一点的补充，插入很多元素、再删除时，可能导致元素本身数量不多，但 `overflow` 桶很多）
+2. 溢出的桶数量过多（插入很多元素、再删除时，可能造成稀疏，导致元素本身数量不多，但 `overflow` 桶很多）
    1. `B < 15 && noverflow >= 2^B`
    2. `B >= 15 && noverflow >= 2^15`
 
 这两种条件下都会发生扩容。但是扩容的策略并不相同，毕竟两种条件应对的场景不同。
 
-1. 对于条件 1，元素太多，而 `bucket` 数量太少，很简单：将 `B` 加 `1`，新申请一个 `2^(B+1)` 的 `bucket`，`bucket` 数量直接变成原来的 `2` 倍。于是，就有新老 `bucket` 了。注意，这时候元素都在老 `bucket` 里，还没迁移到新的 `bucket` 来。这种扩容叫 **增量扩容**。
+1. 对于条件 1，元素太多，而桶数量太少，很简单：将 `B` 加 `1`，新申请一个 `2^(B+1)` 的仓，仓数量直接变成原来的 `2` 倍。于是，就有新老 `bucket` 了。注意，这时候元素都在老 `bucket` 里，还没迁移到新的 `bucket` 来。这种扩容叫 **增量扩容**。
 
-2. 对于条件 2，其实元素没那么多，但是 `overflow bucket` 数特别多，说明很多 `bucket` 都没装满。解决办法就是开辟一个新 `bucket` 空间，将老 `bucket` 中的元素移动到新 `bucket`，使得同一个 `bucket` 中的 `key` 排列地更紧密。这种叫 **等量扩容**。严格上说其实不算扩容，算整理碎片。
+2. 对于条件 2，其实元素没那么多，但是溢出桶数量特别多，说明很多 `bucket` 都没装满。解决办法就是开辟一个新 `bucket` 空间，将老 `bucket` 中的元素移动到新 `bucket`，使得同一个 `bucket` 中的 `key` 排列地更紧密。这种叫 **等量扩容**。严格上说其实不算扩容，算整理碎片。
 
 由于扩容需要将原有的 `key/value` 重新搬迁到新的内存地址，如果有大量的 `key/value` 需要搬迁，会非常影响性能。因此 `Go map` 的扩容采取了 **渐进式扩容** 的方式，类似 `redis` 的扩容，原有的 `key` 并不会一次性搬迁完毕。
 
@@ -192,7 +201,7 @@ loadFactor := count / (2^B)
 >
 > 太小会导致极易触发扩容，造成空间浪费；太多会导致极不易触发扩容，造成 `overflow` 过多。
 >
-> 事实上作者测试了各负载因子下的 平均 `overflow` 数、命中率、`miss` 率等指标，最终取了一个中间数 6.5。
+> 作者测试了各负载因子下的 平均 `overflow` 数、命中率、`miss` 率等指标，最终取了一个中间数 6.5。
 
 
 
@@ -211,7 +220,7 @@ func hashGrow(t *maptype, h *hmap) {
     }
         
     oldbuckets := h.buckets                           // 将buckets赋值给oldbuckets
-    newbuckets := newarray(t.bucket, 1<<(h.B+bigger)) // 申请一个新的、容量为两倍的 bucket 数组
+    newbuckets := newarray(t.bucket, 1<<(h.B+bigger)) // 申请一个新的、容量为 1+bigger 倍的 bucket 数组。（增量为2倍，等量为1倍）
     flags := h.flags &^ (iterator | oldIterator)
     if h.flags&iterator != 0 {
         flags |= oldIterator
@@ -244,13 +253,13 @@ func hashGrow(t *maptype, h *hmap) {
 
 搬迁的动作在 `growWork()` 函数中，而调用 `growWork()` 函数的动作是在 `mapassign` 和 `mapdelete` 函数中。
 
-也就是插入或修改、删除 `key` 的时候，都会尝试进行搬迁 `buckets` 的工作。先检查 `key` 所在的 `oldbuckets` 是否搬迁完毕，如果没有，则先对其进行搬迁。然后再检查其他搬迁状态过程中的桶，如果有，协助进行搬迁。
+也就是插入或修改、删除 `key` 的时候，都会尝试进行搬迁 `buckets` 的工作。先检查 `key` 所在的 `oldbuckets` 是否搬迁完毕，如果没有，则先对其进行搬迁。然后再检查其他搬迁状态过程中的仓，如果有，协助进行搬迁。
 
 ```go
 func growWork(t *maptype, h *hmap, bucket uintptr) {
-    evacuate(t, h, bucket&h.oldbucketmask()) // 搬迁旧桶，这样assign和delete都直接在新桶集合中进行
+    evacuate(t, h, bucket&h.oldbucketmask()) // 搬迁旧仓，这样assign和delete都直接在新仓集合中进行
     if h.growing() {
-        evacuate(t, h, h.nevacuate)          // 再协助搬迁一次其他桶
+        evacuate(t, h, h.nevacuate)          // 再协助搬迁一次其他仓
     }
 }
 ```
@@ -383,13 +392,13 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 
 
-前面说过，扩容分两种情况：有新建 `bucket`，和没有新建 `bucket`。
+前面说过，扩容分两种情况：仓容量翻倍，和仓容量不变。
 
-对于条件 `2`，由于 `bucket` 数量不变， 不需要 `rehash`。
+对于条件 `2`，由于仓数量不变， 仓号不变，不需要 `rehash`。变的只是仓内的桶链表。
 
-对条件 `1` 则需要重新计算 `hash`。新的 `buckets` 数量是之前的一倍，因此只需要看新的 `B` 的最高位。例如，原来 `B = 5`，计算出 `key` 的哈希后，只用看它的低 `5` 位。扩容后，`B` 变成了 `6`，因此需要多看一位，它的低 `6` 位决定 `key` 落在哪个 `bucket`。
+对条件 `1` 则需要重新计算 `hash`。新的仓数量是之前的2倍，因此只需要看新的 `B` 的最高位。例如，原来 `B = 5`，计算出 `key` 的哈希后，原来只用看它的低 `5` 位。扩容后，`B` 变成了 `6`，因此需要多看一位，它的低 `6` 位决定 `key` 落在哪个 `bucket`。
 
-因此，某个 `key` 在搬迁前后 `bucket` 序号可能和原来相等，也可能是相比原来加上 `2^B`（原来的 `B` 值），取决于 `hash` 值第 `B` 位是 `0` 还是 `1`。
+因此，某个 `key` 在搬迁前后仓号可能和原来相等，也可能是相比原来加上 `2^B`（原来的 `B` 值），取决于新的 `hash` 值第 `B` 位是 `0` 还是 `1`。
 
 
 
@@ -397,12 +406,12 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 ## 遍历
 
-理解了上面 `bucket` 序号的变化，我们就可以回答另一个问题了：为什么遍历 `map` 是无序的？
+理解了上面仓序号的变化，我们就可以回答另一个问题了：为什么遍历 `map` 是无序的？
 
 1. `map` 根本就没有维护 `key` 的顺序，计算 `key` 的桶时是用 `hash` 算的，本来有序的 `key`，`hash` 后就无序了。
-2. `map` 在扩容后，会发生 `key` 的搬迁，原来落在同一个 `bucket` 中的 `key`，搬迁后，有些 `key` 就要远走高飞了（`bucket` 序号加上了 `2^B`）。因此，遍历、修改 `map`、再遍历，两次得到的遍历顺序就可能不一样了。
+2. `map` 在扩容后，会发生 `key` 的搬迁。有的 `key` 在旧仓里，有的在新仓里。并且有的 `key` 仓序号也会变，会加上 `2^B`。因此，遍历、修改 `map`、再遍历，两次得到的遍历顺序就可能不一样了。
 
-当然，`Go` 做得更绝，遍历 `map` 时，并不是固定地从 `0` 号 `bucket` 开始遍历，而是通过 `fastrand` 算了个随机数，从一个随机 `bucket` 开始，并且是从这个 `bucket` 的随机 `cell` 开始遍历。特意设计成了无序迭代的结果。
+当然，`Go` 做得更绝，遍历 `map` 时，并不是固定地从 `0` 号仓开始遍历，而是通过 `fastrand` 算了个随机数，从一个随机仓开始，并且是从这个仓的随机 `cell` 开始遍历。特意设计成了无序迭代的结果，以避免程序员依赖 `map` 有序遍历的结果。
 
 
 

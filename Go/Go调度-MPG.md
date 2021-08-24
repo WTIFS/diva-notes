@@ -43,11 +43,11 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 
 **M**：表示系统线程。它本身与一个内核线程进行绑定，是实际的执行体。
 
-- 它和 `P` 绑定，以循环调度方式不断从 `P` 里取 `G` 并执行。
+- 运行时还需要和一个 `P` 绑定，以循环调度方式不断从 `P` 里取 `G` 并执行。
 
 **P**：代表一个虚拟的处理器，作用类似 `CPU` 核，用来控制可同时并发执行的任务数。
 
-- 每个工作线程都必须绑定一个 `P` 才被允许执行任务，否则只能休眠，直到有空闲 `P` 时被唤醒。它还为线程执行提供资源，如内存 (`mcache`)、`G` 队列 (`local runq`) 等。线程独享绑定的 `P` 资源，可在无锁状态下执行高效操作。
+- 每个工作线程都必须绑定一个 `P` 才被允许执行任务，否则只能休眠，直到有空闲 `P` 时被唤醒。它还为线程执行提供资源，如内存 (`mcache`)、`G` 队列 (`local runq`) 、辅助GC等。线程独享绑定的 `P` 资源，可在无锁状态下执行高效操作。
 
 除了上面三个结构体以外，还有一个存放所有可运行 `goroutine` 的容器 `schedt`。每个 `Go` 程序中 `schedt` 结构体只有一个实例对象，在代码中是一个共享的全局变量，每个工作线程都可以访问它以及它所拥有的 `goroutine` 运行队列。
 
@@ -123,7 +123,7 @@ type g struct {
 
 ##### sudog
 
-当 `G` 遇到阻塞场景时，（比如向 `channel` 发送/接收内容时），会被封装为 `sudog` 这样一个结构。其实就是给 `G` 加了个 `elem` 字段，用于记录 `channel` 发送的数据。
+当 `G` 遇到阻塞场景时，比如向 `channel` 发送/接收阻塞时，会被封装为 `sudog` 这样一个结构。其实就是给 `G` 加了个 `elem` 字段，用于记录 `channel` 发送的数据。
 
 ```go
 type sudog struct {
@@ -193,7 +193,7 @@ type p struct {
      
     mcache      *mcache     // 用于内存分配的结构体
   
-    runq     [256]guintptr  // 本地可运行的 G 队列，local runqueue
+    runq     [256]guintptr  // 本地可运行的 G 队列，local runqueue。长度固定256。通过队尾-队头判断实际长度
     runqhead uint32         // 队头
     runqtail uint32         // 队尾
     runnext guintptr        // 下一个可执行 G，优先级比队列高
@@ -282,7 +282,7 @@ type schedt struct {
 - 新的 `goroutine` 会被加到本地队列里
   - 通过 `go` 关键字新建的协程，会被放到本地队列的头部（`runnext` 字段）
   - 调度时，会从队列里 `pop` 一个 `goroutine`，设置栈和 `instruction pointer`，开始执行这个 `goroutine`
-- `P` 的本地队列长度超过 `64` 时，里面一半的 `G` 会被转移至全局队列
+- `P` 的本地队列长度超过 `256` 时，里面一半的 `G` 会被转移至全局队列
 - 任务队列分为三级，分别是 `P.runnext`, `P.runq`, `Sched.runq`，很有些 CPU 多级缓存的意思。
 
 ```go
@@ -319,6 +319,7 @@ func runqput(_p_ *p, gp *g, next bool) {
         gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到本地队列
     }
     
+    // 虽然 runq 是循环队列，但 h 和 t 的值并不会 %256，t 会始终自增，因此可以通过 t-h 判断队列长度。赋值时才取模
     h := atomic.LoadAcq(&_p_.runqhead)            // 队头
     t := _p_.runqtail                             // 队尾
     if t-h < uint32(len(_p_.runq)) {              // 本地队列未满，可写入
@@ -616,10 +617,20 @@ func globrunqget(_p_ *p, max int32) *g {
 
 
 
+
+
+## 问题
+
+##### P 的 runq大小为什么是 256？
+
+太小会频繁触发和全局队列的交换。太大会频繁触发偷窃。
+
+
+
+
+
 #### 参考
 
-> [The Go Scheduler](https://morsmachine.dk/go-scheduler)
->
 > [Golang调度与MPG](https://www.jianshu.com/p/af80342a1233)
 >
 > [深入理解Go语言(03)：scheduler调度器 - 基本介绍](https://www.cnblogs.com/jiujuan/p/12735559.html)
@@ -627,6 +638,6 @@ func globrunqget(_p_ *p, max int32) *g {
 > [golang 调度学习-综述](https://blog.csdn.net/diaosssss/article/details/92830782)
 >
 > [golang核心原理-协程调度时机](https://studygolang.com/articles/34362)
-> 
+>
 > [lucifer_L49715 - 理解golang调度之二 ：Go调度器](https://juejin.cn/post/6844903846825705485)
 
