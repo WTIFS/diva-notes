@@ -4,7 +4,7 @@
 
 #### kafka 的 Replica
 
-1. kafka 的 `topic` 可以设置有N个副本（replica），副本数最好要小于 `broker` 的数量，也就是要保证一个 `broker` 上的 `replica` 最多有一个，这样才能用 `broker id` 指定 `partition`。
+1. `kafka` 的 `topic` 可以设置有N个副本（replica），副本数最好要小于 `broker` 的数量，也就是要保证一个 `broker` 上的 `replica` 最多有一个，这样才能用 `broker id` 指定 `partition`。
 2. 创建副本的单位是 `topic` 的分区，每个分区有1个 `leader` 和0到多个 `follower`。
 
 
@@ -15,7 +15,7 @@
 
 `kafka` 不是完全同步，也不是完全异步，是一种特殊的 ISR（In Sync Replica）。`ISR` 机制权衡了性能与可用性。
 
-`ISR` 表示和 `leader` 保持同步状态的 `follower` 集合。这里 "同步" 的定义可以配置，默认是 `follower` 落后 `master` 的进度在 10秒 以内。
+`ISR` 表示和 `leader` 保持同步状态的 `follower` 集合。这里 "同步" 的定义可以配置，默认是 `follower` 落后 `master` 的进度在 **10秒** 以内。
 
 每次 `follower` 来拉数据时， `leader` 会记录各 `follower` 的同步进度，动态维护 `ISR`。`follower` 落后的时长、落后的消息数、`ISR` 的数量都可以配置。
 
@@ -29,8 +29,8 @@
 
 - 共有7条消息，`offset` (消息偏移量) 分别是 0~6
 - 0 代表这个日志文件的开始
-- `HW (High Watermark)` 为4，0~3 代表这个日志文件可以消费的区间 / `follower` 已同步的偏移量，消费者只能消费到这四条消息
-- `LEO` 代表即将要写入消息的偏移量 `offset``
+- `HW (High Watermark)` 为4，0~3 代表这个日志文件可以消费的区间（实际上是 `follower` 已完成同步的偏移量），消费者只能消费到这四条消息
+- `LEO` 代表即将要下一个消息可插入的偏移量
 - `follower` 拉取数据时，会更新 `leader` 的 `HW`，消费者只能消费 `HW` 前的数据
 
 

@@ -1,5 +1,7 @@
 ##### net/http 路由的实现
 
+是通过一个 `map` 和一个 切片实现的。注册一个路由时，会同时写入 `map` 和切片。查找路由时，先找 `map`，`map` 里如果没有，则遍历切片，通过前缀查找。
+
 ```go
 type ServeMux struct {
 	mu    sync.RWMutex         // 读写锁，保障哈希表的异步安全

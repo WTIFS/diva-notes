@@ -4,7 +4,7 @@
 
 但需要注意的是，`sync.Pool` 缓存的对象随时可能被无通知的清除，即 `Put` 一个对象进池子后，执行 `Get` 操作可能获取到的是一个新对象，原来那个 `Put` 进去的对象没了。因此不能将 `sync.Pool` 用于存储持久对象的场景。
 
-`sync.Pool` 作为 `Go` 内置的官方库，其设计非常精妙。`sync.Pool` 不仅是并发安全的，而且实现了 lock free，里面有许多值得学习的知识点。
+`sync.Pool` 作为 `Go` 内置的官方库，其设计非常精妙。`sync.Pool` 不仅是并发安全的，而且实现了无锁，里面有许多值得学习的知识点。
 
 本文将基于 [go-1.16 的源码](https://github.com/golang/go/blob/release-branch.go1.16/src/sync/pool.go) 对 `sync.Pool` 的底层实现一探究竟。
 
@@ -196,7 +196,7 @@ func (p *Pool) Get() interface{} {
 3. 不同的是，如果 `poolLocal` 里取不到，会通过 `getSlow` 函数，从别的 `P` 的缓存池里偷窃对象。
 	- 这里遍历别的 `P` 的 `poolDequeue` 时，是从后往前遍历，这样可以尽量减少并发冲突。
 	- 这里还会顺便做下 `GC`，如果遍历别的 `P` 的 `poolDequeue` 时里面没有元素，会把它从 `poolChain` 里删掉。
-4. 从上一轮准备`GC` 的 `victim` 字段里尝试取对象。
+4. 从上一轮准备 `GC` 的 `victim` 字段里尝试取对象。
 5. 如果还没有，调用用户设置的 `New()` 函数，创建一个新的对象。
 
 
