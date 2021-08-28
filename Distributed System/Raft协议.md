@@ -27,6 +27,7 @@ Replicated State Machine，用来保证容错性。
 ## Raft协议应用
 
 - redis 主节点选取（采用了类似的做法，但不是直接应用 `Raft`
+- Zookeeper（ZAB协议，也是类似，但不是 `Raft`
 - 分布式数据库：TiDB
 - 服务发现：Consul、etcd
 
