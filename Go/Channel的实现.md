@@ -86,7 +86,7 @@ func chansend(c *hchan, ep unsafe.Pointer, block bool, callerpc uintptr) bool {
 		if !block {
 			return false
 		}
-		gopark(nil, nil, waitReasonChanSendNilChan, traceEvGoStop, 2)
+		gopark(nil, nil, waitReasonChanSendNilChan, traceEvGoStop, 2) // 向 nil channel 写会直接 gopark，进入阻塞
 		throw("unreachable")
 	}
     
@@ -491,7 +491,7 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 1. 读空的 `channel`
 2. 写阻塞 `channel` / 写入数据超过缓冲区 
 3. 向关闭的 `channel` 写数据（`panic: send on closed channel`）
-4. 读写 `nil channel`
+4. 读写 `nil channel`（阻塞，主线程下会导致 `fatal error: all goroutines are asleep`）
 
 
 
