@@ -48,3 +48,10 @@
 
 `redis cluster` 是服务端分片，增减节点时，通过 `reshard` 命令，可以自动迁移数据。
 
+
+
+
+
+#### 参考
+
+> [Horizontal scaling in/out techniques for redis cluster](https://iamvishalkhare.medium.com/horizontal-scaling-in-out-techniques-for-redis-cluster-dcd75c696c86)
