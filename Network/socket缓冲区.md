@@ -130,7 +130,7 @@ Proto     Recv-Q     Send-Q        Local Address            Foreign Address     
 
 #### 发送缓冲区
 
-- 内核会等待`TCP` 层把发送缓冲区数据都发完，最后再执行 四次挥手的第一次挥手（`FIN`包）
+- 内核会等待 `TCP` 层把发送缓冲区数据都发完，最后再执行 四次挥手的第一次挥手（`FIN`包）
 
 
 
