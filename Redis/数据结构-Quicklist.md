@@ -60,7 +60,7 @@ typedef struct quicklistNode {
 
 `redis` 为了节省内存空间，会将 `quicklist` 的节点用 `LZF` 压缩后存储，但这里不是全部压缩，可以配置 `compress` 的值。
 
-> 为什么不全部节点都压缩，而是流出 `compress` 这个可配置的口子呢？其实从统计而已，`list` 两端的数据变更最为频繁，像`lpush, rpush, lpop, rpop` 等命令都是在两端操作，如果频繁压缩或解压缩会代码不必要的性能损耗。
+> 为什么不全部节点都压缩，而是流出 `compress` 这个可配置的口子呢？其实从统计而已，`list` 两端的数据变更最为频繁，像 `lpush, rpush, lpop, rpop` 等命令都是在两端操作，如果频繁压缩或解压缩会代码不必要的性能损耗。因此一般两端不压缩，方便进出元素。中间压缩，节省体积。
 
 
 
@@ -79,7 +79,7 @@ typedef struct quicklistLZF {
 
 
 
-插入的时候，需要判断下插入 `ziplist` 的长度。如果 `ziplist` 能够放入新元素，即大小没有超过 `list-max-ziplist-size`，那么直接插入。如果 `ziplist` 不能放入新元素，则新建一个 `quicklist` 节点，即新的 `ziplist` ，新的数据项会被插入到新的 `ziplist` ，新的`quicklist` 节点插入到原有的 `quicklist` 上。
+插入的时候，需要判断下插入 `ziplist` 的长度。如果 `ziplist` 能够放入新元素，即大小没有超过 `list-max-ziplist-size`，那么直接插入。如果 `ziplist` 不能放入新元素，则新建一个 `quicklist` 节点，即新的 `ziplist` ，新的数据项会被插入到新的 `ziplist` ，新的节点插入到原有的 `quicklist` 上。
 
 
 

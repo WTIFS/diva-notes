@@ -38,13 +38,13 @@
 
 ### redis cluster 的 hash slot 算法
 
-`hash slot` 其实就是虚拟节点的思路，每个虚拟节点叫一个 `slot`。
+其实就是虚拟节点的思路，每个虚拟节点叫一个 `slot`。
 
 `redis cluster` 有固定的 `16384` 个 `hash slot`，对每个 `key` 计算 `CRC16` 值，然后对 `16384` 取模，可以获取 `key` 对应的 `hash slot`。
 
-`redis cluster` 中每个 `master` 都会持有部分 `slot`，比如有 3 个 `master`，那么可能每个 `master` 持有 `5000` 多个 `hash slot`。
+`redis cluster` 中每个 `master` 都会持有部分 `slot`，比如有 3 个 `master`，那么就是每个 `master` 持有 `5000` 多个 `hash slot`。
 
 `hash slot` 让节点的增加和移除变得简单，增加一个节点，就将其他节点的 `slot` 分一部分过去；减少一个节点，就将它的迁移到其他节点上。
 
-`redis cluster` 是服务端分片，增减节点时，会自动迁移数据。
+`redis cluster` 是服务端分片，增减节点时，通过 `reshard` 命令，可以自动迁移数据。
 

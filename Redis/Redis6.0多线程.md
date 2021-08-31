@@ -1,6 +1,6 @@
 # 核心流程
 
-下图是Redis的内部核心流程图，内部其实主要是通过双向队列和红黑树实现
+下图是 `Redis` 的内部核心流程图，内部其实主要是用的 `epoll`，而 `epoll` 通过双向队列和红黑树实现
 
 ![preview](assets/v2-44e1c720b416217f96391b9a9fda8344_r.jpg)
 
@@ -40,8 +40,8 @@
 
 1. 在主线程里将 `N` 个 `read` 操作派发给读线程处理，期间主线程自旋等待。
    1. 这一步如果用原来的串行方式做，需要 `N * time` 的时间，现在因为是并行 `read`，只需要 `time` 的时间
-2. 等到所有读线程处理完 `read` 后主线程再执行 redis 命令
-3. 执行完 redis 命令后同样将 `write` 操作交给 `N` 个写线程处理
+2. 等到所有读线程处理完 `read` 后主线程再执行 `redis` 命令
+3. 执行完 `redis` 命令后同样将 `write` 操作交给 `N` 个写线程处理
 
 **优点**
 
@@ -59,11 +59,12 @@
 
 ## 单线程IO处理过程
 
-redis启动后会进入一个死循环 `aeMain`，在这个循环里一直等待事件发生，事件分为IO事件和 `timer` 事件，`timer` 事件是一些定时执行的任务，如 `expire key` 等，本文只聊IO事件。
+`redis` 启动后会进入一个死循环 `aeMain`，在这个循环里一直等待事件发生，事件分为IO事件和 `timer` 事件，`timer` 事件是一些定时执行的任务，如 `expire key` 等，本文只聊IO事件。
 
-`epoll` 处理的是 `socket` 的可读、可写事件，当事件发生后提供一种高效的通知方式， 当想要异步监听某个`socket` 的读写事件时，需要去事件驱动框架中注册要监听事件的 `socket`，以及对应事件的 `回调function`。然后死循环中可以通过 `epoll_wait` 不断地去拿发生了可读写事件的 `socket`，依次处理即可。
+`epoll` 处理的是 `socket fd` 的可读、可写事件，当事件发生后提供一种高效的通知方式， 当想要异步监听某个`socket` 的读写事件时，需要去事件驱动框架中注册要监听事件的 `socket fd`，以及对应事件的回调函数。然后死循环中可以通过 `epoll_wait` 不断地去拿就绪的 `fd`，依次处理即可。
 
 `可读` 可以简单理解为，对应的 `socket` 中有新的tcp数据包到来。
+
 `可写` 可以简单理解为，对应的 `socket` 写缓冲区已经空了(数据通过网络已经发给了客户端)
 
 一图胜前言，完整、详细流程图如下：
@@ -71,10 +72,10 @@ redis启动后会进入一个死循环 `aeMain`，在这个循环里一直等待
 ![preview](assets/v2-f6e51a8e16623161736fd8e65fefca1d_r.jpg)
 
 - `aeMain()` 内部是一个死循环，会在 `epoll_wait` 处短暂休眠
-- `epoll_wait` 返回的是当前可读、可写的 `socket列表`
+- `epoll_wait` 返回的是当前可读、可写的 `socket` 列表
 - `beforeSleep` 是进入休眠前执行的逻辑，核心是回写数据到 `socket`
 - 核心逻辑都是由IO事件触发，要么可读，要么可写，否则执行 `timer` 定时任务
-- 第一次的IO可读事件，是监听 `socket` (如 `6379` 的 `socket`)，当有握手请求时，会执行 `accept`调用，得到一个连接 `socket`，注册可读回调 `createClient`，往后客户端和redis的数据都通过这个 `socket` 进行
+- 第一次的IO可读事件，是监听 `socket` (如 `6379` 的 `socket`)，当有握手请求时，会执行 `accept`调用，得到一个连接 `socket`，注册可读回调 `createClient`，往后客户端和 `redis` 的数据都通过这个 `socket` 进行
 - 一个完整的命令，可能会通过多次 `readQueryFromClient` 才能从 `socket` 读完，这意味着多次可读IO事件
 - 命令执行的结果会写，也是这样，大概率会通过多次可写回调才能写完
 - 当命令被执行完后，对应的连接会被追加到 `clients_pending_write`，`beforeSleep` 会尝试回写到 `socket`，写不完会注册可写事件，下次继续写
@@ -115,4 +116,5 @@ redis启动后会进入一个死循环 `aeMain`，在这个循环里一直等待
 #### 参考
 
 > [Redis 6 的多线程](https://zhuanlan.zhihu.com/p/369702837)
+>
 > [渔人 - Redis 6.0 多线程IO处理过程详解](https://zhuanlan.zhihu.com/p/144805500)

@@ -40,7 +40,7 @@ typedef struct intset {
 
 ## 和 Hashtable 的关系
 
-使用 `REDIS_ENCODING_HT` 编码时，`Set `实际上就是一个 `value` 为`NULL`的`Hashtable`。使用的数据结构就是 `dict`。
+使用 `REDIS_ENCODING_HT` 编码时，`Set  `实际上就是一个 `value` 为`NULL`的`Hashtable`。使用的数据结构就是 `dict`。
 
 放入 `key` 后，保存  `value` 时所用的方法正是 `Hashtable` 的 `dictSetVal` 方法：`dictSetVal(ht,de,NULL)`。只不过 `Set` 传的第三个参数值为 `NULL`。
 

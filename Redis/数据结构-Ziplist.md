@@ -49,7 +49,7 @@ if (encoding == ZIP_INT_8B) {
 
 
 
-`Ziplist` 用在 `Zset` 中。使用时的结构是这样的：
+`ziplist` 用在 `Zset` 中。使用时的结构是这样的：
 
 ![aHR0cHM6Ly91cGxvYWQtaW1hZ2VzLmpp](assets/aHR0cHM6Ly91cGxvYWQtaW1hZ2VzLmpp.jpg)
 
@@ -60,6 +60,6 @@ if (encoding == ZIP_INT_8B) {
 ## 插入/删除元素
 
 - 向中部插入/删除某个节点时，需要更新 `next` 节点的 `pre_entry_length`
-- `next` 节点的 `pre_entry_length` 变长或变短可能又导致 `next.next.pre_entry_length` 需要变更
+- `next` 节点的 `pre_entry_length` 变长或变短可能又导致节点本身长度改变，进而导致 `next.next.pre_entry_length` 需要变更
 - 这就是说， 在某个/某些节点的前面添加新节点之后， 程序必须沿着路径挨个检查后续的节点，是否满足新长度的编码要求
 - 不过，因为只有在新添加节点的后面有连续多个长度接近 `254` 的节点时，这种连锁更新才会发生， 所以可以普遍地认为，这种连锁更新发生的概率非常小

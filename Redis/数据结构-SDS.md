@@ -1,5 +1,5 @@
 # SDS
-- `redis` 中对`string`值的存储，并没有使用C中的 `char*`，而是使用了 `SDS (simple dynamic string)`
+- `redis` 中对 `string` 值的存储，并没有使用C中的 `char*`，而是使用了 `SDS (simple dynamic string)`
 - `SDS` 结构类似 `Go` 里的切片，有 `3` 个字段，总长度 `len`，空闲长度 `free`，以及实际字符串数组 `char*`
 - 相对于 `C` 的 `char*`，有如下优势：
   - 二进制安全的（不用原字符串 + `\0` 的方式表示结束）
