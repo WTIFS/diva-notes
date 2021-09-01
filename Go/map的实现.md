@@ -31,7 +31,9 @@ type hmap struct {
 }
 ```
 
-`buckets` 是一个指针，指向的是一个 `bmap` 数组。下文统一将这个数组称为**"仓"**。一个仓由一个 `bmap` 链表构成，下文将 `bmap` 称为**"桶"**：
+`buckets` 是一个指针，指向的是一个 `bmap` 数组。下文统一将这个数组称为**"仓"**。一个仓由一个 `bmap` 链表构成，下文将 `bmap` 称为**"桶"**。
+
+其实这个结构有点像火车，每个 `map` 里有 `2^B` 条火车 `buckets`，每条火车由一堆车厢 `bmap` 串联。每个车厢里 8 个座位。
 
 ```golang
 type bmap struct {
@@ -419,7 +421,7 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 # 写
 
-对 `key` 计算 `hash` 值，根据 `hash` 值按照之前的流程，找到要赋值的位置。源码大体和之前的类似，核心还是一个双层循环，外层遍历 `bucket` 和它的 `overflow bucket`，内层遍历整个 `bucket` 的各个 `cell`。
+对 `key` 计算 `hash` 值，根据 `hash` 值按照之前的流程，找到要赋值的位置。源码大体和之前的类似，核心还是一个双层循环，外层遍历 `bucket` 和它的 `overflow bucket`，内层遍历整个 `bucket` 的各个 `cell`。如果 `key` 上有值，就执行 `update`，否则执行 `insert`。
 
 函数首先会检查 `map` 的标志位 `flags`。如果 `flags` 的写标志位此时被置 `1` 了，说明有其他协程在执行写操作，进而导致程序 `panic`。这也说明了 `map` 对协程是不安全的。
 
@@ -431,9 +433,35 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 # 删
 
-流程和写是一样的，只不过对指针就赋值 `nil`，对非指针就调用 `typedmemclr`。
+流程和写类似，只不过赋值是把元素置为 `nil`。并将 `tophash` 置为 **已删除** 状态。
 
-删除仅仅是将对应的 `slot` 设置为 `empty`，并没有减少内存。
+```go
+// 清空 key
+if t.indirectkey() {
+    *(*unsafe.Pointer)(k) = nil
+} else if t.key.ptrdata != 0 {
+    memclrHasPointers(k, t.key.size)
+}
+
+// 清空 value
+e := add(unsafe.Pointer(b), dataOffset+bucketCnt*uintptr(t.keysize)+i*uintptr(t.elemsize))
+if t.indirectelem() {
+    *(*unsafe.Pointer)(e) = nil
+} else if t.elem.ptrdata != 0 {
+    memclrHasPointers(e, t.elem.size)
+} else {
+    memclrNoHeapPointers(e, t.elem.size)
+}
+
+// 修改 tophash
+b.tophash[i] = emptyOne
+```
+
+比较坑的是，删除并不会释放 `cell`，只是将 `cell` 的 `tophash` 标记为了 `emptyOne` 状态。
+
+后续写入新元素时，不会复用这个 `cell` 。
+
+只有触发扩容时，才会重新组织这些空的 `cell`。
 
 
 
