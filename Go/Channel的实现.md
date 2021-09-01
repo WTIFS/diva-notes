@@ -490,8 +490,13 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 
 1. 读空的 `channel`
 2. 写阻塞 `channel` / 写入数据超过缓冲区 
-3. 向关闭的 `channel` 写数据（`panic: send on closed channel`）
-4. 读写 `nil channel`（阻塞，主线程下会导致 `fatal error: all goroutines are asleep`）
+3. 读写 `nil channel`（阻塞。主线程下会导致 `fatal error: all goroutines are asleep`）
+
+| 操作        | nil channel | 正常 channel | 已关闭 channel |
+| ----------- | ----------- | ------------ | -------------- |
+| `<- ch`     | 阻塞        | 成功 / 阻塞  | 读到零值       |
+| `ch <-`     | 阻塞        | 成功 / 阻塞  | `panic`        |
+| `close(ch)` | `panic`     | 成功         | `panic`        |
 
 
 
