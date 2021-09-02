@@ -1,4 +1,4 @@
-**在浏览器中输入url后发生了什么**
+#### 在浏览器中输入url后发生了什么
 
 1. 解析 `URL`，获取域名、资源名，生成 `HTTP` 请求
 2. `DNS` 解析 `URL` 对应的 `IP`
@@ -12,9 +12,11 @@
 
 
 
-**常见的HTTP Headers**
 
-`Accept`: 浏览器端可以接受的MIME类型。例如：`Accept: text/html `
+
+#### 常见的HTTP Headers
+
+`Accept`: 浏览器端可以接受的 `MIME` 类型。例如：`Accept: text/html `
 
 `Accept-Encoding`: 浏览器申明自己可接收的编码方法，通常指定压缩方法。例如： `Accept-Encoding: gzip, deflate`
 
@@ -38,6 +40,19 @@
 `Referer`: 告诉服务器我是从哪个链接过来的，服务器可以以此做统计
 
 `User-Agent`: 客户端使用的操作系统和浏览器的名称和版本
+
+
+
+
+
+#### 设计一个基于 UDP 差不多可靠的算法
+
+TCP 和 UDP 其实是对成本和质量的不同取舍。`TCP` 重质量但成本大。`UDP` 重成本小但质量差。
+
+1. 数据完整性：增加 `CRC` 校验和
+2. 乱序：增加 `SEQ` 序列号
+3. 丢包：增加 `ACK` 机制
+
 
 
 

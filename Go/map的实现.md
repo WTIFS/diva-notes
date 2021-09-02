@@ -421,11 +421,17 @@ func evacuate(t *maptype, h *hmap, oldbucket uintptr) {
 
 # 写
 
-对 `key` 计算 `hash` 值，根据 `hash` 值按照之前的流程，找到要赋值的位置。源码大体和之前的类似，核心还是一个双层循环，外层遍历 `bucket` 和它的 `overflow bucket`，内层遍历整个 `bucket` 的各个 `cell`。如果 `key` 上有值，就执行 `update`，否则执行 `insert`。
+对 `key` 计算 `hash` 值，根据 `hash` 值按照之前的流程，找到要赋值的位置。源码大体和查找的类似。核心还是一个双层循环，外层遍历 `bucket` 和它的 `overflow bucket`，内层遍历整个 `bucket` 的各个 `cell`。如果 `key` 上有值，就执行 `update`，否则执行 `insert`。
 
 函数首先会检查 `map` 的标志位 `flags`。如果 `flags` 的写标志位此时被置 `1` 了，说明有其他协程在执行写操作，进而导致程序 `panic`。这也说明了 `map` 对协程是不安全的。
 
 通过前文我们知道扩容是渐进式的，如果 `map` 处在扩容的过程中，那么这次会先协助扩容，完了才向新 `bucket` 里写数据。
+
+```
+func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
+	
+}
+```
 
 
 
@@ -457,11 +463,30 @@ if t.indirectelem() {
 b.tophash[i] = emptyOne
 ```
 
-比较坑的是，删除并不会释放 `cell`，只是将 `cell` 的 `tophash` 标记为了 `emptyOne` 状态。
+删除并不会释放 `cell`，只是将 `cell` 的 `tophash` 标记为了 `emptyOne` 状态。
 
-后续写入新元素时，不会复用这个 `cell` 。
+后续写入新元素时，可以复用 `emptyOne` 状态的 `cell` 。
 
-只有触发扩容时，才会重新组织这些空的 `cell`。
+```go
+// 判断cell是否可写入。删除状态的cell，可以复用
+func isEmpty(x uint8) bool {
+	return x <= emptyOne
+}
+
+// 写map
+func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
+	for i := uintptr(0); i < bucketCnt; i++ {
+		if isEmpty(b.tophash[i]) {
+			if insertb == nil { // 写到新的位置，或者之前已删除的cell
+				insertb = b
+				inserti = i
+			}
+        }
+	}
+}
+```
+
+
 
 
 
