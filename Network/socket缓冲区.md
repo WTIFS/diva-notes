@@ -69,7 +69,7 @@ Proto     Recv-Q     Send-Q        Local Address            Foreign Address     
 
 答案是不确定！执行 `send` 之后，数据只是拷贝到了`socket` 缓冲区。至 什么时候会发数据，发多少数据，全听操作系统安排。
 
-在用户进程中，程序通过操作 `socket` 会从用户态进入内核态，而 `send` 方法会将数据一路传到传输层。在识别到是  `TCP` 协议后，会调用 `tcp_sendmsg` 方法。
+在用户进程中，程序通过操作 `socket` 会从用户态进入内核态，而 `send` 方法会将数据一路传到传输层。在识别到是 `TCP` 协议后，会调用 `tcp_sendmsg` 方法。
 
 ```c
  // net/ipv4/tcp.c
