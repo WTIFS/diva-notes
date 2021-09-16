@@ -240,7 +240,7 @@ func (c *conn) readRequest(ctx context.Context) (w *response, err error) {
 }
 ```
 
-在整个`server`处理流程中，使用了一条`context`链贯穿`Server`、`Connection`、`Request`，不仅将上游的信息共享给下游任务，同时实现了上游可发送取消信号取消所有下游任务，而下游任务自行取消不会影响上游任务。
+在整个`server`处理流程中，使用了一条 `context` 链贯穿`Server`、`Connection`、`Request`，不仅将上游的信息共享给下游任务，同时实现了上游可发送取消信号取消所有下游任务，而下游任务自行取消不会影响上游任务。
 
 另外有两点值得注意：
 
