@@ -106,7 +106,7 @@ log entry := (term_number, command)
 # Raft 协议应用
 
 - redis 选主（采用了类似的做法，但不是直接应用 `raft`
-- `kafka 2.8` 抛弃了 `zk`，改用 `raft`
+- `kafka 2.8` 抛弃了 `zk`，改用 `raft`，实现了个叫 `kraft` 的
   - `zk` 选举时整个集群不可用。一般选举很快，但也有慢的情况，例如碰上 `FullGC`
 - 分布式数据库：TiDB
 - 服务发现：Consul、etcd

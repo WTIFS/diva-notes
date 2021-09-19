@@ -119,6 +119,14 @@
 
 
 
+##### zk VS etcd
+
+两者都是通用的一致性元信息存储，也都有 `watch` 来用于变更通知和分发，就这两点，在应用服务的大部分场景下都可以互相替代。
+
+`ZK` 开发的进度和版本更新比较慢了，社区活跃度远远不如 `etcd`。而且应用性上，如果两者都用过的话，应该都会觉得 `etcd` 易用性更高 (restful api)。
+
+其他要考虑周边产品的生态问题了，运维和开发如果是 `Java` 应用更多，那毫无疑问应该用 `ZK`。如果是搞 `Go` 的，那么还是 `etcd` 吧，毕竟有时候遇到问题还是要看源码的。
+
 
 
 #### 参考
@@ -128,4 +136,6 @@
 > [ZK是强一致性吗?](https://www.zhihu.com/question/455703356)
 >
 > [ruby - Zab算法与Paxos算法异同](https://www.dazhuanlan.com/rubytoto/topics/1278313)
+>
+> [runzhliu - zk VS etcd]()(https://www.zhihu.com/question/286230532/answer/773185906)
 
