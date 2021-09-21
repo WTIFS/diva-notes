@@ -17,6 +17,13 @@ vim ~/.zshrc
 
 # 把以下代码加到尾部
 [[ -s $(brew --prefix)/etc/profile.d/autojump.sh ]] && . $(brew --prefix)/etc/profile.d/autojump.sh
+
+# 修改 plugins 字段，增加 autojump，sublime 也是加在这里的
+plugins=(
+  git
+  autojump
+  sublime
+)
 ```
 
 
