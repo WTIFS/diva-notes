@@ -19,9 +19,9 @@
 
 1. 连接建好时先初始化 `cwnd = 1`，表明可以传一个 `MSS` 大小的数据。
 
-2. 每当收到一个 `ACK`，`cwnd++`; 呈线性上升
+2. 每当收到一个 `ACK`，`cwnd++`；呈线性上升
 
-3. 每当过了一个 `RTT`，`cwnd = cwnd*2`; 呈指数让升
+3. 每当过了一个 `RTT`，`cwnd = cwnd*2`；呈指数上升
 
 4. 还有一个慢启动阈值 `ssthresh（slow start threshold）`，当 `cwnd >= ssthresh` 时，就会进入 "拥塞避免算法"
 
@@ -33,3 +33,40 @@
 
 `Linux 3.0` 下，`cwnd` 初始值为 `10`
 
+
+
+
+
+#  拥塞避免算法 – Congestion Avoidance
+
+前面说过，还有一个 `ssthresh (slow start threshold)`，是一个上限，当 `cwnd >= ssthresh` 时，就会进入 "拥塞避免算法"。一般来说 `ssthresh` 的值是 `65535`，单位是字节，当 `cwnd` 达到这个阈值后，算法如下：
+
+1. 收到一个 `ACK` 时，`cwnd = cwnd + 1/cwnd`
+2. 当每过一个 `RTT` 时，`cwnd = cwnd + 1`
+
+这样就可以避免增长过快导致网络拥塞，慢慢的增加调整到网络的最佳值。很明显，是一个线性上升的算法。
+
+
+
+
+
+# 拥塞状态时的算法
+
+前面我们说过，当丢包的时候，会有两种情况：
+1. 等到 `RTO` 超时，重传数据包。`TCP` 认为这种情况太糟糕，反应也很强烈。
+  1. `sshthresh =  cwnd /2`
+  2. `cwnd` 重置为 1
+  3. 进入慢启动过程
+
+2. 快速重传算法，也就是在收到3个 `duplicate ACK` 时就开启重传，而不用等到 `RTO `超时。
+   1. `TCP Tahoe` 的实现和 `RTO` 超时一样。
+   2. `TCP Reno` 的实现是：
+      1. `sshthresh = cwnd / 2`
+      2. `cwnd = sshthresh + 3 * MSS`
+      3. 进入快速重传算法 `Fast Recovery`
+
+我们可以看到 `RTO` 超时后，`sshthresh` 会变成 `cwnd` 的一半。这意味着，如果是 `cwnd <= sshthresh` 时出现的丢包，那么 `TCP` 的 `sshthresh` 就会减掉一半，然后等 `cwnd` 又很快地以指数级增涨爬到这个地方时，又会慢慢的线性增涨。可以看到，`TCP` 是怎么通过这种强烈地震荡快速而小心得找到网站流量的平衡点的。
+
+
+
+![这里写图片描述](assets/SouthEast.png)

@@ -86,8 +86,13 @@ hash高5位   hash                                                  hash低5位
 
 ```go
 func mapaccess1(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
-	// 计算出高 8 位的 hash
-	// 相当于右移 56 位，只取高8位
+    // 计算哈希
+    // 是不同数据类型有不同的哈希计算函数 hasher。但没有找到初始化该函数的代码
+    // hash0 是新建 map 时 fastrand 得到的哈希种子
+   	hash := t.hasher(key, uintptr(h.hash0))
+    
+	// 计算出哈希高8位的
+	// 相当于右移56位，只取高8位
 	top := uint8(hash >> (sys.PtrSize*8 - 8))
     
     // 扩容用的，top < minTopHash时，表示迁移相关，+= minTopHash，以区分正常的 top hash 值和表示状态的值。
@@ -490,7 +495,33 @@ func mapassign(t *maptype, h *hmap, key unsafe.Pointer) unsafe.Pointer {
 
 
 
-# 和redis的异同
+# 和 redis 哈希表的异同
+
+##### 数据结构
+
+`redis` 的 `kv` 是包装在 `dictEntry` 结构里的，`go` 的 `kv` 是长度为 8 的 `kkkkkkkk/vvvvvvvv` 数组。
+
+##### 冲突解决
+
+均为拉链法。但 `redis` 每个桶没有格子数限制， `dictEntry` 通过链表相连。`go` 里每个桶有固定的 8 个格子，超过后存到溢出桶里。
+
+##### 哈希查找
+
+均为根据 `hash` 查桶。`go` 里多了个通过 `tophash` 快速试错的优化。
+
+##### 扩容时机
+
+`redis`：每个桶存储 >= 1 个 `key ` 时扩容。<= 0.1 个 `key` 时缩容。
+
+`go`：每个桶存储 >= 6.5 个 `key` 时扩容。溢出桶 >= 正常桶数量时 等量扩容。不支持缩容。
+
+##### 渐进式扩容
+
+扩容期间查找时均为先查找老桶。判断老桶已搬迁才去新桶找。
+
+`redis`：增删改查时均会触发。
+
+`go`：仅在增删时触发。
 
 
 
