@@ -136,9 +136,33 @@ type eface struct {
 
 
 
+
+
+## reflect
+
+`reflect` 包基本是依赖 `interface` 来实现的。里面定义了一个接口和一个结构体，即 `reflect.Type` 和 `reflect.Value`，提供很多函数来获取存储在接口里的类型信息。
+
+`reflect.Type` 主要提供关于类型相关的信息，所以它和 `_type` 关联比较紧密；`reflect.Value` 则结合 `_type` 和 `data` 两者，因此程序员可以获取甚至改变类型的值。
+
+`reflect` 包中提供了两个基础的关于反射的函数来获取上述的接口和结构体：
+
+```text
+func TypeOf(i interface{}) Type 
+func ValueOf(i interface{}) Value
+```
+
+调用这两个函数时，实参会先被转化为 `interface{}` 类型。这样，实参的类型信息、方法集、值信息都存储到 `interface{}` 变量里了。
+
+
+
+
+
+
 #### 参考
 
 [王炳明 - Go语言中的静态类型与动态类型](https://zhuanlan.zhihu.com/p/258617170)
 
 [老虎来了 - 浅析 golang interface 实现原理](https://zhuanlan.zhihu.com/p/60983066)
+
+[Stefno - 深度解密Go语言之反射](https://zhuanlan.zhihu.com/p/64884660)
 
