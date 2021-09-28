@@ -33,8 +33,8 @@ typedef struct dict {
     // 搬迁进度
     // 因为是渐进式的哈希，数据的迁移并不是一步完成的，所以需要有一个索引来标记当前的搬迁进度
     // rehash 是 以bucket(桶)为基本单位进行渐进式的数据迁移的，每步完成一个 bucket 的迁移，直至所有数据迁移完毕
-    long rehashidx; /* rehashing not in progress if rehashidx == -1 */
-    int16_t pauserehash; /* If >0 rehashing is paused (<0 indicates coding error) */
+    long rehashidx;      // 扩容时的迁移进度。不迁移时为-1
+    int16_t pauserehash; // 标记是否暂停扩容。持久化时需要暂停扩容
 } dict;
 
 // 哈希表子结构
