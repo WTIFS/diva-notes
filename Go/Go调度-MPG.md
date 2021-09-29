@@ -440,6 +440,8 @@ func newosproc(mp *m) {
 
 
 
+
+
 ## 调度 schedule
 
 1. 调度器每调度 `61` 次，从全局队列里取一次 `G`，以避免饥饿
