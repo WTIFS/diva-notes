@@ -50,11 +50,11 @@ tarjan(u) {
     Stack.push(u)                             // 将节点u压入栈中
     for each (u, v) in E                      // 枚举每一条边
           if (v is not visted)                // 如果节点v未被访问过
-                  tarjan(v)                   // 继续向下找
-                  Low[u] = min(Low[u], Low[v])
-            else if (v in S)            // 如果节点v还在栈内
-            Low[u] = min(Low[u], DFN[v])
-    if (DFN[u] == Low[u])        // 如果节点u是强连通分量的根
+                tarjan(v)                     // 继续向下找
+                Low[u] = min(Low[u], Low[v])
+            else if (v in S)                  // 如果节点v还在栈内
+            	Low[u] = min(Low[u], DFN[v])
+    if (DFN[u] == Low[u])             // 如果节点u是强连通分量的根
        repeat
            v = S.pop                  // 将v退栈，为该强连通分量中一个顶点
            print v

@@ -17,3 +17,9 @@ func buildNext(s string) {
 }
 ```
 
+
+
+#### 例题
+
+[686. Repeated String Match](https://leetcode.com/problems/repeated-string-match/)
+
