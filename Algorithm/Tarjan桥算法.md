@@ -52,7 +52,7 @@ tarjan(u) {
           if (v is not visted)                // 如果节点v未被访问过
                 tarjan(v)                     // 继续向下找
                 Low[u] = min(Low[u], Low[v])
-            else if (v in S)                  // 如果节点v还在栈内
+          else if (v in S)                  // 如果节点v还在栈内
             	Low[u] = min(Low[u], DFN[v])
     if (DFN[u] == Low[u])             // 如果节点u是强连通分量的根
        repeat

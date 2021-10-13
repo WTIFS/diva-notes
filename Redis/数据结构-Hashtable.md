@@ -82,8 +82,24 @@ typedef struct dictht {
 ## 触发条件
 
 1. 没有在执行 `BGSAVE / BGREWRITEAOF` 命令 
-2. `keys / size >= 5` 触发扩容
-3. `keys / size <= 0.1` 触发缩容
+   2. `keys / size >= 1` 触发扩容
+   2. `keys / size <= 0.1` 触发缩容
+2. 在执行 `BGSAVE / BGREWRITEAOF` 命令
+   1. 扩容因子为 `5`
+
+```c
+// src/dict.c
+static int _dictExpandIfNeeded(dict *d) {
+    if (d->ht[0].used >= d->ht[0].size &&
+        (dict_can_resize ||
+         d->ht[0].used/d->ht[0].size > dict_force_resize_ratio) && // dict_force_resize_ratio 持久化时扩容条件更严苛
+        dictTypeExpandAllowed(d))
+    {
+        return dictExpand(d, d->ht[0].used + 1);
+    }
+    return DICT_OK;
+}
+```
 
 
 
@@ -94,6 +110,14 @@ typedef struct dictht {
 1.  在  `redis` 中每一个增删改查命令中都会判断数据库字典中的哈希表是否正在进行搬迁，如果是则帮助执行一次
 2.  如果服务器比较空闲，`redis` 数据库将很长时间内都一直使用两个哈希表。所以也会有定时任务周期性检查，如果发现有字典正在进行搬迁，则会花费1毫秒的时间协助搬迁
 
+```c
+// src/dict.c
+// 向dict中写入时
+dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing) {
+    if (dictIsRehashing(d)) _dictRehashStep(d); // 辅助迁移
+}
+```
+
 
 
 
@@ -103,6 +127,14 @@ typedef struct dictht {
 因为在进行渐进式 `rehash` 的过程中， 字典会同时使用 `ht[0]` 和 `ht[1]` 两个哈希表， 所以在渐进式 `rehash` 进行期间， 字典的删改查等操作会在两个哈希表上进行： 比如说， 要在字典里面查找一个键的话， 程序会先在 `ht[0]` 里面进行查找， 如果没找到的话， 就会继续到 `ht[1]` 里面进行查找。
 
 另外， 在渐进式 `rehash` 执行期间， 新添加到字典的键值对一律会被保存到 `ht[1]` 里面， 而 `ht[0]` 则不再进行任何添加操作：这一措施保证了 `ht[0]` 包含的键值对数量会只减不增， 并随着 `rehash` 操作的执行而最终变成空表。
+
+```c
+// src/dict.c
+// 向dict中写入时
+dictEntry *dictAddRaw(dict *d, void *key, dictEntry **existing) {
+    ht = dictIsRehashing(d) ? &d->ht[1] : &d->ht[0]; // 判断当前命中的 dict 是否正在扩容，是的话使用 ht[0]
+}
+```
 
 
 

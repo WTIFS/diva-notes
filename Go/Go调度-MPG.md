@@ -94,11 +94,11 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 ## G (goroutine) 
 
 - `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
-- `G` 并非执行体，它仅仅保存并发任务状态，为任务提供所需要的栈空间
+- `G` 并非执行体，**仅保存并发任务状态**，为任务提供所需要的栈空间
 - `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
 - `G` 使用完毕后会被放回缓存池里，等待复用。
     - 因此存在 如果瞬发新建了大量 `G`，高峰后这些 `G` 会一直留着，不释放内存的问题。
-    - 二级缓存池，每个 `P` 里有本地 `G` 缓存；`schedt` 里还有个全局 `G` 缓存
+    - 二级缓存池：每个 `P` 里有本地 `G` 缓存，`schedt` 里还有个全局 `G` 缓存
     - `P` 里的缓存池是 `gFree` 字段， `G` 工作结束后（状态变为 `Gdead`），会放入这里。读写它不需要锁
     - `P.gFree` 里的 `G` 超过 `64` 个后，会分一半的到 `schedt.gFree` 里。`schedt.gFree` 又根据 `G` 的栈大小分成了两个队列
       - 为节省空间，`G` 的栈如果超过 `2KB`，那回收时不会保留它的栈，放入 `schedt.gFree.noStack` 里
@@ -182,7 +182,7 @@ type m struct {
 - `P` 自身是用一个全局数组 `allp` 来保存的，长度默认为 `GOMAXPROCS`
 - 它的主要用途就是用来执行 `goroutine` 的，所以它维护了一个本地 `G` 队列，里面存储了所有需要它来执行的 `goroutine`。
   - 本地队列避免了竞争锁（解决了初代模型最大的问题）。
-- `P` 为线程提供了执行资源，如对象分配内存，本地任务队列等。线程独享 `P` 资源，可以无锁操作
+- `P` 为线程提供了执行资源，如对象分配内存，本地 `G` 队列等。线程独享 `P` 资源，可以无锁操作
 - 为何要维护多个 `P` 呢？是为了当一个 OS线程 `M` 陷入阻塞时，`P` 能从之前的 `M` 上脱离，转而在另一个 `M` 上运行
 - `P` 控制了程序的并行度。可以通过 `GOMAXPROCS` 设置 `P` 的个数，最多只能有 `GOMAXPROCS` 个线程能并行，一般设为 CPU 核数
 
@@ -218,7 +218,7 @@ var (
 
 ## Schedt
 
-- `Schedt` 结构就是调度器，它维护有存储 `M` 和 `G `的队列以及调度器的一些状态信息等。
+- `Schedt` 结构就是调度器，它维护有存储 `M` 和 `G ` 的队列以及调度器的一些状态信息等。
 - 它是一个共享的全局变量，全局只有一个 `schedt` 类型的实例。
 - 里面存放了空闲（即休眠） `M` 列表、空闲 `P` 列表、全局 `G` 队列、废弃的 `G` 队列
 
@@ -266,9 +266,9 @@ type schedt struct {
 - 调用 `runtime.newproc` 创建出第一个 `goroutine`，这个 `goroutine` 将执行的函数是 `runtime.main`
     - 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 "hello, world" 就是完全跑在这个 `goroutine` 里
 - 主 `goroutine` 开始执行后，做的第一件事情是创建了一个新的内核线程 `M`: 系统监控 `sysmon`
-    - `sysmon` 用来检测长时间（超过 10 ms）运行的 `goroutine`，将其调度到全局队列。这个队列的优先级比较低
+    - `sysmon` 用来检测长时间（超过 10ms）运行的 `goroutine`，将其调度到全局队列
 - 此外还会启动垃圾回收、运行用户代码的 `gouroutine`
-- 程序启动后，会给每个逻辑核心分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些内核线程仍然由 OS scheduler 来调度。
+- 程序启动后，会给每个逻辑 `CPU` 分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些 `M` 仍然由 OS scheduler 来调度。
 
 
 
@@ -316,7 +316,7 @@ func runqput(_p_ *p, gp *g, next bool) {
     if next {                                                  // 新建G时，next为true，G会直接写入 runnext 字段
         oldnext := _p_.runnext
         _p_.runnext.cas(oldnext, guintptr(unsafe.Pointer(gp))) // 直接写入 runnext 字段
-        gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到本地队列
+        gp = oldnext.ptr()                                     // 原 runnext 里的 G 后面会被踢到本地/全局队列
     }
     
     // 虽然 runq 是循环队列，但 h 和 t 的值并不会 %256，t 会始终自增，因此可以通过 t-h 判断队列长度。赋值时才取模
@@ -390,9 +390,9 @@ func wakep() {
 
 // 获取空闲 M 或新建 M
 func startm(_p_ *p, spinning bool) {
-  	nmp := mget()          // 获取空闲 M
+  	nmp := mget()              // 获取空闲 M
 		if nmp == nil {        // 没有空闲 M，新建一个
-        id := mReserveID() // sched.mnext 字段记录了 M 的自增 ID；如果超出 sched.maxmcount(默认10000)，会 panic
+        id := mReserveID()     // sched.mnext 字段记录了 M 的自增 ID；如果超出 sched.maxmcount(默认10000)，会 panic
 				newm(fn, _p_, id)
 				return
 		}
@@ -513,7 +513,7 @@ top:
 
 #### findrunnable
 
-依次从 本地队列、全局队列、netpoll、其他 `P` 获取可运行的 `G`。偷窃优先级最低，因为会影响其他 `P` 执行（需要原子操作）。
+依次从 本地队列、全局队列、netpoll、其他 `P` 获取可运行的 `G`。偷窃优先级最低，因为会影响其他 `P` 执行（需要加锁）。
 
 ```go
 // 寻找可执行的 G

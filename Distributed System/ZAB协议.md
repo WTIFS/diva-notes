@@ -43,6 +43,7 @@
 - `LOOKING`: 节点正处于选主状态，不对外提供服务，直至选主结束
 - `FOLLOWING`: 作为系统的从节点，接受主节点的更新并写入本地日志
 - `LEADING`: 作为系统主节点，接受客户端更新，写入本地日志并复制到从节点
+- 类似 `raft` 的 `leader, follower, candidate` 三角色
 
 
 
@@ -63,7 +64,7 @@
 1. 选 `epoch` 最大的
 2. `epoch` 相等，选 `zxid` 最大的
 3. `epoch` 和 `zxid` 都相等，选 `server_id` 最大的（`zoo.cfg` 中配置的 `myid`）
-4. 节点可以投多次票，给不同的参选者。
+4. 节点可以投多次票，给不同的参选者
 
 5. 需要过半数节点投票同意，才能选出主节点。主节点收到半数以上票后会通知其他点
 
@@ -79,7 +80,7 @@
 
 1. 对 `leader` 上有、`follower` 上没有的数据，`leader` 要重新同步给 `follower`
 
-2. 对 `leader` 上没有、`follower` 上有的，`leader` 要通知 `follower` 丢弃。
+2. 对 `leader` 上没有、`follower` 上有的，`leader` 要通知 `follower` 丢弃
 
 通过同步阶段，保证数据的一致性。
 

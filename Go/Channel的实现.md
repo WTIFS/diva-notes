@@ -3,7 +3,7 @@
 
 > 不要通过共享内存来通信，而应该通过通信来共享内存
 
-这句话是一条编程指导建议，和 golang 本身关系不大。
+这句话是一条编程指导建议，和 `Golang` 本身关系不大。
 
 
 
@@ -58,8 +58,8 @@ type hchan struct {
   
 // sudog 代表 goroutine
 type waitq struct {
-        first *sudog //这个是链表，通过next指向下一个sudog
-        last  *sudog //链表尾部
+    first *sudog //这个是链表，通过next指向下一个sudog
+    last  *sudog //链表尾部
 }
 ```
 
