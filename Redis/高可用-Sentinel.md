@@ -18,7 +18,7 @@
 - 如果一个实例距离最后一次有效回复 `PING` 命令的时间超过配置的时长， 则这个实例会被哨兵进程标记为主观下线 `SDOWN`
   - 如果主观下线的是 `slave` 或者 `sentinel` ，则没有后续的操作
 - 主观下线的节点为主节点时，该 `sentinel` 节点可以通过命令 `sentinel is_master_down_by_addr` 来获得其他 `sentinel` 对于该主节点的判断
-  - 当有超过 `QUORUM`（配置文件里的）个 `sentinel` 判定主观下线时，`master` 会被标记为客观下线 `ODOWN`
+  - 当有超过 `QUORUM`（配置文件里的，默认半数）个 `sentinel` 判定主观下线时，`master` 会被标记为客观下线 `ODOWN`
   - 在一般情况下，每个 `sentinel` 进程会以每 `10` 秒一次的频率向集群中的所有 `master` 、`slave` 从服务器发送 `INFO` 命令
 - 若没有足够数量的 `sentinel` 同意 `master` 下线， `master` 的客观下线状态就会被移除，恢复正常状态。
 - 若 `master` 重新向 `sentinel` 的 `PING` 命令返回有效回复，`master` 的主观下线状态就会被移除，变为新的从节点。

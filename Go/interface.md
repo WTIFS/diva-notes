@@ -138,10 +138,6 @@ type eface struct {
     data  unsafe.Pointer
 }
 ```
-<img src="assets/v2-a3d03db087e982e45ba7e46811d43e31_r.jpg" alt="preview" />
-
-
-
 
 
 

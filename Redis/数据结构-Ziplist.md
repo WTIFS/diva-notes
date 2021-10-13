@@ -49,7 +49,7 @@ if (encoding == ZIP_INT_8B) {
 
 
 
-`ziplist` 用在 `Zset` 中。使用时的结构是这样的：
+`ziplist` 用在 `Zset` 和 `Quicklist` 中。使用时的结构是这样的：
 
 ![aHR0cHM6Ly91cGxvYWQtaW1hZ2VzLmpp](assets/aHR0cHM6Ly91cGxvYWQtaW1hZ2VzLmpp.jpg)
 

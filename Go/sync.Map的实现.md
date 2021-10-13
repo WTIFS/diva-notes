@@ -176,10 +176,3 @@ func (m *Map) Store(key, value interface{}) {
 7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如 [concurrent-map](https://github.com/orcaman/concurrent-map)
 
 
-
-
-
-## 问题
-
-##### read 里也是 map ，扩容时咋办？不需要加锁吗？
-

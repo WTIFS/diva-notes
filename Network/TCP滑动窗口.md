@@ -47,7 +47,7 @@
 
 ## Zero Window
 
-上图，我们可以看到一个处理缓慢的接收端是怎么把发送端的 `window` 给降成 `0 `的。如果 `2indow` 变成 `0` 了，发送端就不发数据了，可以想像成 "Window Closed"。如果发送端不发数据了，接收方一会儿 `Window size` 可用了，怎么通知发送端呢？
+上图，我们可以看到一个处理缓慢的接收端是怎么把发送端的 `window` 给降成 `0 `的。如果 `window` 变成 `0` 了，发送端就不发数据了，可以想像成 "Window Closed"。如果发送端不发数据了，接收方一会儿 `Window size` 可用了，怎么通知发送端呢？
 
 为了解决这个问题，`TCP` 使用了 `Zero Window Probe` 技术，缩写为 `ZWP`，称为**窗口探测**，检测可用的 `Window`。
 
@@ -68,7 +68,7 @@
 
 #### 接收端
 
-如果收到的数据导致 `window size` 小于某个值，可以直接回 `ACK window=0` ，这样就把 `window `给关闭了，阻止了发送方再发数据过来
+如果收到的数据导致 `window size` 小于某个值，可以直接回 `ACK window=0` ，这样就把 `window ` 给关闭了，阻止了发送方再发数据过来
 
 等到接收端处理了一些数据后 `windows size` 大于等于了`MSS (Maximum Segment Size) 最大报文长度`，或者接收缓冲区有一半为空，就可以把 `window` 打开让发送方发送数据过来。
 
