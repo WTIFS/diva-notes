@@ -54,7 +54,7 @@
 
 ![img](assets/v2-bd07238f5104a05889a0f242ef8e33f0_1440w.jpg)
 
-之间的通信数据可读性不需要好，只需要RPC框架能读懂即可，因此效率可以更高。传输协议可以使用 `HTTP2 (GRPC)`，或者自研 (`Thrift`)。序列化协议可以使用 `protobuf (GRPC)` ，自研 (`Thrift`)。
+之间的通信数据可读性不需要好，只需要RPC框架能读懂即可，因此效率可以更高。传输协议可以使用 `HTTP2 (GRPC)`，或者自研 (`Thrift`)。序列化协议可以使用 `protobuf (GRPC)`  / 自研 (`Thrift`)。
 
 
 
