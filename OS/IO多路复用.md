@@ -228,7 +228,7 @@ struct pollfd {
 
 具体，操作系统提供了这三个函数。
 
-第一步，创建一个 `epoll` 句柄
+第一步，创建一个 `epoll` 句柄（处理器
 
 ```c
 int epoll_create(int size);
