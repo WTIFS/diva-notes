@@ -36,7 +36,7 @@
 
 ## 实现
 
-### 跳表节点 zskiplistNode
+#### 跳表节点 zskiplistNode
 
 ```c
 typedef struct zskiplistNode {  
@@ -45,12 +45,40 @@ typedef struct zskiplistNode {
     struct zskiplistNode *backward;     // 前驱节点
     struct zskiplistLevel {  
         struct zskiplistNode *forward;  // 后继节点
-        unsigned int span;              // 本节点到下个节点跨过了几个元素
+        unsigned int span;              // 层跨度，记录本节点到下个节点跨过了几个元素
     } level[];                          // 分层数组
 } zskiplistNode;
 ```
 
 
+
+#### 插入
+
+插入前由 `hashmap` 来防重
+
+```c
+// zadd key field score，参数里的 ele 是 field
+zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) { 
+	for (i = zsl->level-1; i >= 0; i--) { // 从最上层开始，遍历每层
+         while (x->level[i].forward &&
+                (x->level[i].forward->score < score ||
+                    (x->level[i].forward->score == score &&
+                    sdscmp(x->level[i].forward->ele,ele) < 0))) // scrore相同的，比较字符串值
+        {
+            x = x->level[i].forward;
+        }
+        update[i] = x; // 使用 update 数组记录每层 x 插入位置的前驱节点
+    }
+    
+    level = zslRandomLevel(); // 随机生成本次插入的层数，每多一层，概率*0.25
+    
+    x = zslCreateNode(level,score,ele);
+    for (i = 0; i < level; i++) {
+        x->level[i].forward = update[i]->level[i].forward; // 将 x.next 指向原下一个节点
+        update[i]->level[i].forward = x;  
+    }
+}
+```
 
 
 
