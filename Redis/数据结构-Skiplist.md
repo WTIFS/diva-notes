@@ -39,6 +39,7 @@
 #### 跳表节点 zskiplistNode
 
 ```c
+// src/t_zset.c
 typedef struct zskiplistNode {  
     robj *obj;     // 元素 
     double score;  // 分值用于排序 
@@ -57,6 +58,8 @@ typedef struct zskiplistNode {
 插入前由 `hashmap` 来防重
 
 ```c
+// src/t_zset.c
+
 // zadd key field score，参数里的 ele 是 field
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) { 
 	for (i = zsl->level-1; i >= 0; i--) { // 从最上层开始，遍历每层
@@ -78,7 +81,25 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         update[i]->level[i].forward = x;  
     }
 }
+
+// 随机生成层数
+#define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
+#define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
+int zslRandomLevel(void) {
+    int level = 1;
+    while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF)) // 等价于 while (random() < 0.25)
+        level += 1;
+    return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
+}
 ```
+
+
+
+#### 问题
+
+[随机层数的概率为什么是 p=0.25?](https://github.com/redis/redis/pull/3889)
+
+这个值是对空间和时间的权衡。p值约大，查询速度就越快（因为上层索引多），但占用的空间也越多。
 
 
 
