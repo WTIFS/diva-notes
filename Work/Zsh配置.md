@@ -1,4 +1,4 @@
-##### 安装
+##### 安装 zsh
 
 ```bash
 git clone git@github.com:ohmyzsh/ohmyzsh.git
@@ -11,6 +11,9 @@ git clone git@github.com:ohmyzsh/ohmyzsh.git
 ##### 安装 autojump 插件
 
 ```bash
+# 安装 brew，如果已有则跳过
+/bin/zsh -c "$(curl -fsSL https://gitee.com/cunkai/HomebrewCN/raw/master/Homebrew.sh)"
+
 brew install autojump
 
 vim ~/.zshrc
