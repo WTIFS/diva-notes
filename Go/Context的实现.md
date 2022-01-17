@@ -32,7 +32,7 @@ type canceler interface {
 
 
 
-库里头提供了4个`Context` 实现，来供大家玩耍
+库里头提供了4个 `Context` 实现，来供大家玩耍
 
 ```go
 // 完全空的Context，用作树的根节点，其实是个int
@@ -189,7 +189,7 @@ func WithDeadline(parent Context, d time.Time) (Context, CancelFunc) {
 
 # 4. net/http中的实际应用
 
-1. 首先`Server`在开启服务时会创建一个`valueCtx`, 存储了`server`的相关信息，之后每建立一条连接就会开启一个协程，并携带此`valueCtx`。
+1. 首先 `Server` 在开启服务时会创建一个 `valueCtx`, 存储了`server`的相关信息，之后每建立一条连接就会开启一个协程，并携带此`valueCtx`。
 
 ```go
 func (srv *Server) Serve(l net.Listener) error {    

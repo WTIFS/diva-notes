@@ -36,21 +36,70 @@
 
 ## 实现
 
-### 跳表节点 zskiplistNode
+#### 跳表节点 zskiplistNode
 
 ```c
+// src/t_zset.c
 typedef struct zskiplistNode {  
     robj *obj;     // 元素 
     double score;  // 分值用于排序 
     struct zskiplistNode *backward;     // 前驱节点
     struct zskiplistLevel {  
         struct zskiplistNode *forward;  // 后继节点
-        unsigned int span;              // 本节点到下个节点跨过了几个元素
+        unsigned int span;              // 层跨度，记录本节点到下个节点跨过了几个元素
     } level[];                          // 分层数组
 } zskiplistNode;
 ```
 
 
+
+#### 插入
+
+插入前由 `hashmap` 来防重
+
+```c
+// src/t_zset.c
+
+// zadd key field score，参数里的 ele 是 field
+zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) { 
+	for (i = zsl->level-1; i >= 0; i--) { // 从最上层开始，遍历每层
+         while (x->level[i].forward &&
+                (x->level[i].forward->score < score ||
+                    (x->level[i].forward->score == score &&
+                    sdscmp(x->level[i].forward->ele,ele) < 0))) // scrore相同的，比较字符串值
+        {
+            x = x->level[i].forward;
+        }
+        update[i] = x; // 使用 update 数组记录每层 x 插入位置的前驱节点
+    }
+    
+    level = zslRandomLevel(); // 随机生成本次插入的层数，每多一层，概率*0.25
+    
+    x = zslCreateNode(level,score,ele);
+    for (i = 0; i < level; i++) {
+        x->level[i].forward = update[i]->level[i].forward; // 将 x.next 指向原下一个节点
+        update[i]->level[i].forward = x;  
+    }
+}
+
+// 随机生成层数
+#define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
+#define ZSKIPLIST_P 0.25      /* Skiplist P = 1/4 */
+int zslRandomLevel(void) {
+    int level = 1;
+    while ((random()&0xFFFF) < (ZSKIPLIST_P * 0xFFFF)) // 等价于 while (random() < 0.25)
+        level += 1;
+    return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
+}
+```
+
+
+
+#### 问题
+
+[随机层数的概率为什么是 p=0.25?](https://github.com/redis/redis/pull/3889)
+
+这个值是对空间和时间的权衡。p值约大，查询速度就越快（因为上层索引多），但占用的空间也越多。
 
 
 

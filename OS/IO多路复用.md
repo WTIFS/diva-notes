@@ -228,7 +228,7 @@ struct pollfd {
 
 具体，操作系统提供了这三个函数。
 
-第一步，创建一个 `epoll` 句柄
+第一步，创建一个 `epoll` 句柄（处理器
 
 ```c
 int epoll_create(int size);
@@ -321,9 +321,9 @@ int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout
 
 #### 问题
 
-IO多路复用，复用的是什么？
+IO多路复用，复用的是什么？目的是什么？
 
-- 进程 / 线程。使用同一进程 / 线程处理多个连接
+- 进程 / 线程。使用同一进程 / 线程处理多个连接。目的是使用很少的 CPU、内存资源就可以处理很多的连接，降低系统负载
 
 
 
