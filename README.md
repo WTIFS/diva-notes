@@ -8,7 +8,7 @@ Table of contents:
 * [README](README.md)
 * Ads
     * [谷歌的广告业务是如何赚钱的](Ads/Google.md)
-* Algorithm
+* Algorithm 算法
     * [KMP算法](Algorithm/KMP算法.md)
     * [Tarjan桥算法](Algorithm/Tarjan桥算法.md)
     * [倍增](Algorithm/倍增.md)
@@ -19,16 +19,16 @@ Table of contents:
     * [环的判断](Algorithm/环的判断.md)
 * Career
     * [Career](Career/Career.md)
-* Data Structure
-    * [红黑树](<Data Structure/红黑树.md>)
-    * [锁](Data Structure/锁.md)
-* Distributed System
-    * [BASE 理论](<Distributed System/BASE理论.md>)
-    * [CAP](Distributed System/CAP.md)
-    * [Raft协议](Distributed System/Raft协议.md)
-    * [Service Mesh](Distributed System/服务网格.md)
-    * [ZAB协议](Distributed System/ZAB协议.md)
-    * [分布式事务](Distributed System/分布式事务.md)
+* Data Structure 数据结构
+    * [红黑树](<DataStructure/红黑树.md>)
+    * [锁](DataStructure/锁.md)
+* Distributed System 分布式
+    * [BASE 理论](<DistributedSystem/BASE理论.md>)
+    * [CAP](DistributedSystem/CAP.md)
+    * [Raft协议](DistributedSystem/Raft协议.md)
+    * [Service Mesh](DistributedSystem/服务网格.md)
+    * [ZAB协议](DistributedSystem/ZAB协议.md)
+    * [分布式事务](DistributedSystem/分布式事务.md)
 * Go
     * [Channel的实现](Go/Channel的实现.md)
     * [Context的实现](Go/Context的实现.md)
@@ -62,7 +62,7 @@ Table of contents:
     * [架构](kafka/架构.md)
     * [高可用](kafka/高可用.md)
     * [Questions](kafka/Questions.md)
-* Network
+* Network 网络
     * [ARP解析](Network/ARP解析.md)
     * [DNS解析](Network/DNS解析.md)
     * [DPVS](Network/DPVS.md)
@@ -85,7 +85,7 @@ Table of contents:
     * [TCP重传机制](Network/TCP重传机制.md)
     * [Questions](Network/Questions.md)
     * [参考](Network/参考.md)
-* OS
+* OS 操作系统
     * [COW写时复制](OS/COW写时复制.md)
     * [IO多路复用](OS/IO多路复用.md)
     * [内存分配](OS/内存分配.md)
@@ -122,17 +122,17 @@ Table of contents:
     * [高可用-主从同步](Redis/高可用-主从同步.md)
     * [持久化](Redis/高可用-持久化.md)
     * [Questions](Redis/Questions.md)
-* System Design
-    * [关注/粉丝列表](<System Design/关注列表.md>)
-    * [大文件排序/合并/diff](<System Design/大文件处理.md>)
-    * [大纲](<System Design/大纲.md>)
-    * [延迟队列](<System Design/延迟队列.md>)
-    * [熔断](<System Design/熔断.md>)
-    * [秒杀系统](<System Design/秒杀系统.md>)
-    * [负载均衡](<System Design/负载均衡.md>)
-    * [错误处理](<System Design/错误处理.md>)
-    * [限流](<System Design/限流.md>)
-    * [Questions](<System Design/Questions.md>)
+* System Design 系统设计
+    * [关注/粉丝列表](<SystemDesign/关注列表.md>)
+    * [大文件排序/合并/diff](<SystemDesign/大文件处理.md>)
+    * [大纲](<SystemDesign/大纲.md>)
+    * [延迟队列](<SystemDesign/延迟队列.md>)
+    * [熔断](<SystemDesign/熔断.md>)
+    * [秒杀系统](<SystemDesign/秒杀系统.md>)
+    * [负载均衡](<SystemDesign/负载均衡.md>)
+    * [错误处理](<SystemDesign/错误处理.md>)
+    * [限流](<SystemDesign/限流.md>)
+    * [Questions](<SystemDesign/Questions.md>)
 * DB
     * MySQL
         * [ACID](DB/MySQL/ACID.md)
