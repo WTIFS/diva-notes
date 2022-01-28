@@ -2,7 +2,7 @@
 
 Chris's study notes about backend
 
-See on gitbook: https://wtifs.gitbook.io/diva-notes
+See on gitbook: [diva-notes](https://wtifs.gitbook.io/diva-notes)
 
 
 Table of contents:
