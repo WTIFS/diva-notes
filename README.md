@@ -1,6 +1,8 @@
-# Saber的后端学习笔记
+# Chris的后端学习笔记
 
-My study notes
+Chris's study notes about backend
+
+See on gitbook: https://wtifs.gitbook.io/diva-notes
 
 
 Table of contents:
