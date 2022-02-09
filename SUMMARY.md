@@ -154,7 +154,7 @@ Table of contents:
 
 - Work
   - [bash](Work/bash.md)
-  - [code review](Work/code review.md)
+  - [code review](Work/CodeReview.md)
   - [iTerm2](Work/iTerm2.md)
   - [mac](Work/mac.md)
   - [postgresql](Work/postgresql.md)
