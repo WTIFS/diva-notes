@@ -1,3 +1,9 @@
+LAN: Local Area Network，局域网
+
+LAN: Wide Area Network，广域网
+
+
+
 #### 在浏览器中输入url后发生了什么
 
 1. 解析 `URL`，获取域名、资源名，生成 `HTTP` 请求
