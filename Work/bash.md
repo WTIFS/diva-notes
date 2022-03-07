@@ -98,8 +98,12 @@ ln -s 实际文件夹 /app/xxx/conf
 
 **curl**
 
-```
+```bash
+# 上传图片
 curl -X POST -D “name=@1.jpg” url
+
+# POST JSON 格式参数 并格式化响应
+curl -XPOST -H "Content-type:application/json" -d "json参数" | python -m json.tool
 ```
 
 
@@ -161,5 +165,4 @@ $- 显示shell使用的当前选项，与set命令功能相同
 -ge       //大于等于
 
 -le       //小于等于
-
 
