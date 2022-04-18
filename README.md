@@ -7,7 +7,6 @@ See on gitbook: [diva-notes](https://wtifs.gitbook.io/diva-notes)
 
 Table of contents:
 
-* [README](README.md)
 * Ads
     * [谷歌的广告业务是如何赚钱的](Ads/Google.md)
 * Algorithm 算法
@@ -69,9 +68,9 @@ Table of contents:
     * [DNS解析](Network/DNS解析.md)
     * [DPVS](Network/DPVS.md)
     * [GET和POST](Network/GET和POST.md)
-    * [HTTP2](Network/Http2.md)
-    * [HTTP3](Network/Http3.md)
-    * [HTTPS](Network/Https.md)
+    * [HTTP2](Network/HTTP2.md)
+    * [HTTP3](Network/HTTP3.md)
+    * [HTTPS](Network/HTTPS.md)
     * [LVS的转发模式](Network/LVS的转发模式.md)
     * [Nginx](Network/Nginx.md)
     * [OSI七层模型](Network/OSI七层模型.md)
