@@ -79,5 +79,6 @@ alias ggpush="git push"
 alias idea="open -a Intellij\ IDEA"
 alias goland="open -a GoLand"
 alias typora="open -a typora"
+alias chrome="open -a Google\ Chrome"
 ```
 
