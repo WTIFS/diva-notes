@@ -17,11 +17,10 @@ dip： destination ip
 
 ## LVS的几种转发模式
 
-- DR模型 -- （Director Routing-直接路由）
-- NAT模型 -- (NetWork Address Translation-网络地址转换)
-- fullNAT -- （full NAT）
-- ENAT --（enhence NAT 或者叫三角模式/DNAT，阿里云提供）
-- IP TUN模型 -- (IP Tunneling - IP隧道)
+- DR模型 -- (Director Routing - 直接路由，替换MAC地址)
+- NAT模型 -- (NetWork Address Translation - 网络地址转换，源地址替换)
+- FULLNAT --  (FULL NAT)
+- IP 隧道模型 -- (IP Tunneling)
 
 
 
