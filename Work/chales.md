@@ -15,3 +15,11 @@
 在 `Proxy` 菜单中选择 `SSL Proxying Settings` 进入配置页面
 
 ![img](assets/charles3.jpg)
+
+
+
+
+
+### 手机配置
+
+手机代理设为电脑后，浏览器访问 `chls.pro/ssl` 下载证书并安装
