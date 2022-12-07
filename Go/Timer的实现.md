@@ -1,4 +1,11 @@
-# Timer的实现
+# time.Timer的实现
+
+定时任务是我们工作中经常遇到的一个场景。`go` 里可以通过 `time.Timer` / `time.Ticker` 轻松构建定时器用于任务定时执行。不知大家有没有好奇过定时器是如何实现的？ 
+
+
+
+# 各版本实现演进
+
 - `go1.10` 及之前
   - 一个全局最小堆
     - 最小堆是非常常见的用来管理 `timer` 的数据结构。在最小堆中，作为排序依据的 `key` 是 `timer` 的 `when` 属性，也就是何时触发。即最近一次触发的 `timer` 将会处于堆顶。
@@ -6,7 +13,7 @@
     - `timeproc` 执行时需要阻塞（`for` 死循环）占用 `M`，会挤走 `M` 上本来运行的 `G` 和 `P`，切换代价较高
 - `go1.0 ~ go1.13` 
   - 上述方案存在锁竞争；且堆体积较大，插入 / 删除效率低
-  - `64` 个全局桶 + 最小堆（四叉堆）
+  - 将全局最小堆改为 `64` 个全局桶 + 最小堆（四叉堆）
     - 将所有定时器打散到 `64` 个最小堆中，减小每个堆的数据量，插入时用 `P` 的 `id` 取模找堆，降低锁粒度
     - 每个桶一个 `timeproc` 协程，仍然存在上下文切换代价高的问题
 - `go1.14` 
@@ -15,19 +22,18 @@
   - 不再使用 `timeproc` 协程调度，改为在调度时触发定时器的检查，避免了 `timeproc` 的上下文切换、调度
   - 像 `G` 任务一样，当 `P` 本地没有 `timer` 时，可以尝试从其他的 `P` 偷取一些 `timer`
 - 其它方案
-  - 时间轮
+  - 时间轮：`kafka` 使用
     - 比如将 `1` 秒 分成长度为 `1000` 的环形队列，则每个格子表示 `1ms`
     - 再起个死循环进程，判断当前时间所属的格子上，是否有定时任务需要执行
     - 可以像时分秒的设计一样，使用多层时间轮组合，即可组合表示更多的时间
     - 槽多，可以很大程度减少锁竞争
-    - `kafka` 用的就是这种方案
-  - 对于持续性定时的 `ticker` 类型，只需要将其从堆/队列里取出，调整下次到期时间，再放回去即可，类似永久性递归
+  - 红黑树：`nginx` 使用
+      - 最小堆是把最近的 `timer` 放在堆顶，红黑树则是把最近的 `timer`  放入树最左侧
+- 对于持续性定时的 `ticker` 类型，只需要将其从堆/队列里取出，调整下次到期时间，再放回去即可，类似永久性递归
 
 
 
 > 以下内容基于 go1.14
-
-
 
 ## 1. 底层结构
 
@@ -54,7 +60,7 @@ type runtimeTimer struct {
 // runtime2.go
 type p struct {
     timersLock mutex // 仍然有锁，因为任务窃取时，timers 也会被别的 P 窃取
-    timers []*timer  // 四叉堆，存放定时器任务
+    timers []*timer  // 最小四叉堆，存放定时器任务
 }
 ```
 
@@ -93,7 +99,7 @@ func sendTime(c interface{}, seq uintptr) {
     }
 }
 
-// 这个和 NewTimer 差不多，只是回调不一样，这里回调是参数
+// 这个和 NewTimer 差不多，只是回调不一样。NewTimer 里回调是写死的，而这里回调是参数，可以自定
 func AfterFunc(d Duration, f func()) *Timer {
 }
 ```
@@ -104,9 +110,8 @@ func AfterFunc(d Duration, f func()) *Timer {
 
 ```go
 // runtime/time.go
-// startTimer adds t to the timer heap. -> timer 实际上是用的四叉堆，每个 P 里一个这样的堆
-// 通过link做方法映射，time/sleep.go 里调用的 time.startTimer 其实是 runtime 包里的。
-//go:linkname startTimer time.startTimer
+// startTimer adds t to the timer heap. 这个函数会将 timer 放到 P 的最小堆里
+//go:linkname startTimer time.startTimer 通过link做方法映射，time/sleep.go 里调用的 time.startTimer 指向 runtime 包
 func startTimer(t *timer) {
     addtimer(t)
 }
@@ -123,7 +128,7 @@ func addInitializedTimer(t *timer) {
     pp := getg().m.p.ptr() 
     lock(&pp.timersLock)
     
-    ok := cleantimers(pp) && doaddtimer(pp, t) // 清理最小堆里的失效节点 && 把新建的 timer 放到堆里
+    ok := cleantimers(pp) && doaddtimer(pp, t) // 清理堆里的失效节点 & 把新建的 timer 放到堆里
     unlock(&pp.timersLock)
 }
 ```
@@ -132,7 +137,7 @@ func addInitializedTimer(t *timer) {
 
 ##### **runtime.cleantimers**
 
-对 `P` 中 `timer` 最小堆的头节点进行清理工作
+对 `P` 中 `timer` 堆的头节点进行清理工作
 
 ```go
 func cleantimers(pp *p) {
@@ -143,11 +148,11 @@ func cleantimers(pp *p) {
 		switch s := atomic.Load(&t.status); s {   // 判断堆顶节点的状态
 		
             case timerDeleted:  // 删除状态
-				dodeltimer0(pp) // 删除
+				dodeltimer0(pp) // 删除堆顶节点
 		
 			case timerModifiedEarlier, timerModifiedLater: // timer 被修改到了更早或更晚的时间
 				t.when = t.nextwhen                        // 设置新的 when 字段
-				dodeltimer0(pp)                            // 删除
+				dodeltimer0(pp)                            // 删除堆顶节点
         		doaddtimer(pp, t)                          // 设置新的 when 字段后重新放回堆
 		}
 	}
@@ -158,7 +163,7 @@ func cleantimers(pp *p) {
 
 ##### **runtime.doaddtimer**
 
-`doaddtimer` 函数实际上很简单，主要是将 `timer` 与 `P` 设置关联关系，并将 `timer` 加到最小堆里。
+`doaddtimer` 函数实际上很简单，主要是将 `timer` 与 `P` 设置关联关系，并将 `timer` 加到堆里。
 
 ```go
 func doaddtimer(pp *p, t *timer) { 
@@ -170,7 +175,6 @@ func doaddtimer(pp *p, t *timer) {
 
 	t.pp.set(pp) // 设置 timer 与 P 的关联
 	i := len(pp.timers)
-    
 	
 	pp.timers = append(pp.timers, t) // 将 timer 加入到堆中
 	siftupTimer(pp.timers, i)        // 调整 timer 在堆中的位置
@@ -185,7 +189,7 @@ func doaddtimer(pp *p, t *timer) {
 
 `timer` 的运行是交给 `runtime.runtimer` 函数执行的，这个函数会不断检查 `P` 上最小堆堆顶 `timer` 的状态，根据状态做不同的处理。
 
-运行时会根据 `period` 判断该 `timer` 是否为 `ticker` 类型，是否需要反复执行。是的话需要重设下次执行时间，并调整该` timer` 在堆中的位置。一次性 `timer` 的话会删除该 `timer`。最后运行 `timer` 中的回调函数
+运行时会根据 `period` 判断该 `timer` 是否为 `ticker` 类型，是否需要反复执行：是的话需要重设下次执行时间，并调整该 ` timer` 在堆中的位置；一次性 `timer` 的话则会删除该 `timer`。最后运行 `timer` 中的回调函数
 
 ```go
 // runtime/time.go
@@ -199,10 +203,9 @@ func runtimer(pp *p, now int64) int64 {
             case timerWaiting:                    
                 if t.when > now { return t.when }          // 还没到时间，返回下次执行时间，退出循环
                 runOneTimer(pp, t, now)                    // 如果到时间了，则运行该 timer
-                return 0                                   // 这里 return 了？如果有多个定时器定的同一时间咋办？
-          
+                return 0                                   
             
-            case timerDeleted:                             // 删除           
+            case timerDeleted:                             // 过期 timer，删除           
                 dodeltimer0(pp)
           
             case timerModifiedEarlier, timerModifiedLater: // 被修改，需要调整位置
@@ -248,7 +251,7 @@ func runOneTimer(pp *p, t *timer, now int64) {
 
 - 从调度循环中触发
   - 调用 `runtime.schedule` 执行调度时
-  - 调用`runtime.findrunnable` 获取可执行 `G` / 执行抢占时
+  - 调用 `runtime.findrunnable` 获取可执行 `G` / 执行抢占时
 - `sysmon` 每轮监控中会触发
 
 
@@ -300,8 +303,6 @@ func sysmon() {
 1. 每个 `goroutine` 底层的 `G` 对象上，都有一个 `timer` 属性，这是个 `runtimeTimer` 对象，专门给 `sleep` 使用。当第一次调用 `sleep` 的时候，会创建这个 `runtimeTimer`，之后 `sleep` 的时候会一直复用这个 `timer` 对象。
 2. 调用 `sleep` 时，触发 `timer` 后，直接调用 `gopark`，将当前 `goroutine` 挂起。
 3. 它的 `callback` 就是 `goready` ，回调时直接唤醒被挂起的 `goroutine`。
-
-
 
 
 
