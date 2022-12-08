@@ -132,6 +132,10 @@ poweroff
 
 
 
+##### cat 中文乱码
+
+cat xxx | iconv -f GBK -t UTF-8
+
 
 
 #### bash脚本
