@@ -98,10 +98,10 @@ type g struct {
     m            *m         // 当前 Goroutine 绑定的 M
     sched        gobuf      // 调度相关的数据，上下文切换时就更新这个
     preempt      bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
-	timer        *timer     // 给 time.Sleep 用的 timer
+      timer        *timer     // 给 time.Sleep 用的 timer
     ...
-  	_panic       *_panic    // panic链表
-	_defer       *_defer    // defer链表
+    _panic       *_panic    // panic链表
+      _defer       *_defer    // defer链表
 }
 ```
 - `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
@@ -186,13 +186,13 @@ type p struct {
     runqtail uint32         // 队尾
     runnext guintptr        // 下一个可执行 G，优先级比 runq 队列高
     
-	gFree struct {          // Gdead 状态的 G 池。新建 G 时，优先从这里取进行复用，其次再用 schedt 里的全局队列
-		gList
-		n int32
-	}
+    gFree struct {          // Gdead 状态的 G 池。新建 G 时，优先从这里取进行复用，其次再用 schedt 里的全局队列
+        gList
+        n int32
+    }
 
-	sudogcache []*sudog     // sudog 缓存池。二级缓存，优先从这里复用，再用 schedt 里的
-	sudogbuf   [128]*sudog
+    sudogcache []*sudog     // sudog 缓存池。二级缓存，优先从这里复用，再用 schedt 里的
+    sudogbuf   [128]*sudog
 }
 
 var (
@@ -234,12 +234,12 @@ type schedt struct {
     runq     gQueue        // 全局 runnable G 队列
     runqsize int32         // 全局 G 队列的长度
    
-  	gFree struct {		     // 有效 dead G 的全局缓存。二级设计，新建 goroutine 时，优先从 P 复用，再从这里
-		lock    mutex
-		stack   gList	     // 包含栈的
-		noStack gList	     // 没有栈的
-		n       int32
-	}
+    gFree struct {         // 有效 dead G 的全局缓存。二级设计，新建 goroutine 时，优先从 P 复用，再从这里
+        lock    mutex
+        stack   gList      // 包含栈的
+        noStack gList      // 没有栈的
+        n       int32
+    }
     
     sudoglock  mutex      
     sudogcache *sudog      // 全局 sudog 缓存。也是个二级缓存，使用时先用 P 的，再用全局的
@@ -255,22 +255,23 @@ type schedt struct {
 
 # 实现
 
-## 程序启动
-- 调度器初始化 `runtime.schedinit`
+## 程序启动后 MPG 的创建
+
+- 调度器初始化函数 `runtime.schedinit`
     - `schedinit` 函数主要会创建一批 `P`，数量默认为 `CPU` 数。如果用户设置了 `GOMAXPROCS` 环境变量，则 `P` 的数量为 `max(GOMAXPROCS, 256)`，也就是最多 256。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
 - 调用 `runtime.newproc` 创建出第一个 `goroutine`，这个 `goroutine` 将执行的函数是 `runtime.main`
     - 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 `"hello, world"` 就是完全跑在这个 `goroutine` 里
 - 主 `goroutine` 开始执行后，做的第一件事情是创建了一个新的内核线程 `M`: 系统监控 `sysmon`
     - `sysmon` 用来检测长时间（超过 10ms）运行的 `goroutine`，将其调度到全局队列
 - 此外还会启动垃圾回收、运行用户代码的 `gouroutine`
-- 程序启动后，会给每个逻辑 `CPU` 分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些 `M` 仍然由 OS scheduler 来调度。
+- 程序启动后，会给每个逻辑 `CPU` 分配一个 `P`；同时，会给每个 `P` 分配一个 `M`，这些 `M` 由 OS scheduler 来调度。
 
 
 
 
 
 ## 创建 G
-- 使用 `go func()` 关键字时，会调用 `newproc`，创建新的 `goroutine`
+- 使用 `go func()` 关键字时，会调用 `newproc` 函数，创建新的 `goroutine`
     - 不一定是从新创建，会先尝试复用空闲的 `G`
     - 先从 `P` 的 `gfree` 字段取空闲 `G`，没有再从 `sched.gfree` 链表里转移一批空闲 `G` 到 `P` 里，再重试
     - 再没有，才会新建
@@ -291,9 +292,9 @@ func newproc(siz int32, fn *funcval) {
         _p_ := getg().m.p.ptr()   
         runqput(_p_, newg, true)                 // 将 G 加入到 P 的运行队列
       
-      	if mainStarted {
-		    	  wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
-			  }
+        if mainStarted {
+            wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
+        }
     })
 }
 ```
@@ -374,51 +375,51 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 // runtime/proc.go
 // 唤醒一个空闲 M 执行空闲 P
 func wakep() {
-	  if atomic.Load(&sched.npidle) == 0 {                                            // 如果没有空闲P就返回
-		    return
-  	}
-	  if atomic.Load(&sched.nmspinning) != 0 || !atomic.Cas(&sched.nmspinning, 0, 1) { // 设为自旋状态，防止并发唤醒
-		    return
-  	}
-	  startm(nil, true) // 找空闲 M，或者新建一个 M
+    if atomic.Load(&sched.npidle) == 0 {                                            // 如果没有空闲P就返回
+        return
+    }
+    if atomic.Load(&sched.nmspinning) != 0 || !atomic.Cas(&sched.nmspinning, 0, 1) { // 设为自旋状态，防止并发唤醒
+        return
+    }
+    startm(nil, true) // 找空闲 M，或者新建一个 M
 }
 
 // 获取空闲 M 或新建 M
 func startm(_p_ *p, spinning bool) {
-  	nmp := mget()              // 获取空闲 M
-		if nmp == nil {            // 没有空闲 M，新建一个
+    nmp := mget()              // 获取空闲 M 
+    if nmp == nil {        // 没有空闲 M，新建一个
         id := mReserveID()     // sched.mnext 字段记录了 M 的自增 ID；如果超出 sched.maxmcount(默认10000)，会 panic
-				newm(fn, _p_, id)
-				return
-		}
+        newm(fn, _p_, id)  // 新建 M
+        return
+    }
 }
 
 // 新建一个M
 func newm(fn func(), _p_ *p, id int64) {
-  	mp := allocm(_p_, fn, id) // 创建 M 对象
-  	newm1(mp)
+    mp := allocm(_p_, fn, id) // 创建 M 对象
+    newm1(mp)
 }
 
 // 创建M对象、分配空间、初始化
 func allocm(_p_ *p, fn func(), id int64) *m {
     mp := new(m)        // 创建M对象 
-  	mp.mstartfn = fn    // 设置启动函数
-	  mcommoninit(mp, id) // 初始化
+    mp.mstartfn = fn    // 设置启动函数
+    mcommoninit(mp, id) // 初始化
   
-	  mp.g0 = malg(8192 * sys.StackGuardMultiplier) // 初始化g0
+    mp.g0 = malg(8192 * sys.StackGuardMultiplier) // 初始化g0
     mp.g0.m = mp
 }
 
 // 为M创建系统线程
 func newm1(mp *m) {
-  	newosproc(mp) // 创建系统线程
+    newosproc(mp) // 创建系统线程
 }
 
 // runtime.os_linux.go
 // 这个函数根据具体 os 的实现是不一样的，linux 下用的是 clone()，macOS 下用的就是 pthread_create()
 // 初始 func 是 mstart，mstart() 会触发调度 schedule()
 func newosproc(mp *m) {
-  	ret := clone(cloneFlags, stk, unsafe.Pointer(mp), unsafe.Pointer(mp.g0), unsafe.Pointer(funcPC(mstart)))
+    ret := clone(cloneFlags, stk, unsafe.Pointer(mp), unsafe.Pointer(mp.g0), unsafe.Pointer(funcPC(mstart)))
 }
 ```
 
@@ -466,21 +467,21 @@ func schedule() {
 
 // STW检查
 top:
-  	if sched.gcwaiting != 0 {
-				gcstopm()
-				goto top
-		}
+    if sched.gcwaiting != 0 {
+        gcstopm()
+        goto top
+    }
 
-  	// 检查定时器
-  	checkTimers(pp, 0)
+    // 检查定时器
+    checkTimers(pp, 0)
   
     // 进入 GC MarkWorker 工作模式
-  	if gp == nil && gcBlackenEnabled != 0 {
-				gp = gcController.findRunnableGCWorker(_g_.m.p.ptr())
-				if gp != nil {
-						tryWakeP = true
-				}
-		}
+    if gp == nil && gcBlackenEnabled != 0 {
+        gp = gcController.findRunnableGCWorker(_g_.m.p.ptr())
+        if gp != nil {
+            tryWakeP = true
+        }
+    }
   
     // 每 tick 61次，从全局队列里取 G
     if gp == nil {
@@ -502,8 +503,8 @@ top:
     }
     
   
-    // 执行任务函数
-		execute(gp, inheritTime)
+    // 执行任务函数 
+    execute(gp, inheritTime)
 }
 ```
 
@@ -517,9 +518,7 @@ top:
 // 寻找可执行的 G
 // Tries to steal from other P's, get g from local or global queue, poll network.
 func findrunnable() (gp *g, inheritTime bool) {
-  	
     now, pollUntil, _ := checkTimers(_p_, 0) // 检查 P 中的定时器，参考 Timer 的实现那篇文章
-  	
     // 本地队列
     if gp, inheritTime := runqget(_p_); gp != nil {
         return gp, inheritTime
