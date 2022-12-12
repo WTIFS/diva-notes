@@ -160,10 +160,10 @@ type m struct {
 
 `M` 并没有像 `G` 和 `P` 一样的状态标记，但可以认为一个 `M` 有以下的状态:
 
-1. 自旋中 `spinning`: `M` 正在从运行队列获取`G`, 这时候 `M` 会拥有一个 `P`
-2. 执行 `go` 代码中:  `M` 正在执行 `go` 代码, 这时候 `M` 会拥有一个 `P`
-3. 执行原生代码中: `M` 正在执行阻塞的 `syscall` 或者 `cgo`, 这时 `M` 并不拥有 `P`（`M` 可以无 `P` 执行原生代码，运行在 `g0` 上）
-4. 休眠中: `M` 发现没有待运行的 `G` 时会进入休眠, 并添加到空闲 `M` 链表中, 这时 `M` 并不拥有 `P`
+1. 自旋中 `spinning`： `M` 正在从运行队列获取`G`, 这时候 `M` 会拥有一个 `P`
+2. 执行 `go` 代码中：  `M` 正在执行 `go` 代码, 这时候 `M` 会拥有一个 `P`
+3. 执行原生代码中： `M` 正在执行阻塞的 `syscall` 或者 `cgo`, 这时 `M` 并不拥有 `P`（`M` 可以无 `P` 执行原生代码，运行在 `g0` 上）
+4. 休眠中： `M` 发现没有待运行的 `G` 时会进入休眠, 并添加到空闲 `M` 链表中, 这时 `M` 并不拥有 `P`
 
 自旋中 `spinning` 这个状态非常重要, 是否需要唤醒或者创建新的 `M` 取决于当前自旋中的 `M` 的数量。
 
@@ -257,9 +257,9 @@ type schedt struct {
 
 ## 程序启动
 - 调度器初始化 `runtime.schedinit`
-    - `schedinit` 函数主要会创建一批 `P`，数量默认为 `CPU` 数。如果用户设置了 `GOMAXPROCS` 环境变量，则 `P` 的数量为 `max(GOMAXPROCS, 256)`，也就是最多 `256`。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
+    - `schedinit` 函数主要会创建一批 `P`，数量默认为 `CPU` 数。如果用户设置了 `GOMAXPROCS` 环境变量，则 `P` 的数量为 `max(GOMAXPROCS, 256)`，也就是最多 256。这些 `P` 初始创建好后都放置在 `Sched ` 的 `pidle` 队列里
 - 调用 `runtime.newproc` 创建出第一个 `goroutine`，这个 `goroutine` 将执行的函数是 `runtime.main`
-    - 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 "hello, world" 就是完全跑在这个 `goroutine` 里
+    - 这第一个 `goroutine` 也就是所谓的主 `goroutine`。我们写的最简单的 `Go` 程序 `"hello, world"` 就是完全跑在这个 `goroutine` 里
 - 主 `goroutine` 开始执行后，做的第一件事情是创建了一个新的内核线程 `M`: 系统监控 `sysmon`
     - `sysmon` 用来检测长时间（超过 10ms）运行的 `goroutine`，将其调度到全局队列
 - 此外还会启动垃圾回收、运行用户代码的 `gouroutine`
@@ -271,7 +271,7 @@ type schedt struct {
 
 ## 创建 G
 - 使用 `go func()` 关键字时，会调用 `newproc`，创建新的 `goroutine`
-    - 也不一定是创建，实际会尝试复用
+    - 不一定是从新创建，会先尝试复用空闲的 `G`
     - 先从 `P` 的 `gfree` 字段取空闲 `G`，没有再从 `sched.gfree` 链表里转移一批空闲 `G` 到 `P` 里，再重试
     - 再没有，才会新建
 - 新的 `goroutine` 会被加到本地队列里
@@ -292,8 +292,8 @@ func newproc(siz int32, fn *funcval) {
         runqput(_p_, newg, true)                 // 将 G 加入到 P 的运行队列
       
       	if mainStarted {
-		    wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
-		}
+		    	  wakep()                              // 这里还会触发一次唤醒空闲的 M 执行空闲的 P
+			  }
     })
 }
 ```
@@ -322,12 +322,12 @@ func runqput(_p_ *p, gp *g, next bool) {
         atomic.StoreRel(&_p_.runqtail, t+1)       // 更新队尾指针
         return
     }
-    if runqputslow(_p_, gp, h, t) { // 如果本地队列满了，分一半到全局队列。因为需要加锁，所以slow
+    if runqputslow(_p_, gp, h, t) { // 如果本地队列满了，分一半到全局队列。因为需要加锁，所以函数叫 slow
         return
     }
 }
 
-// 移动本地队列的前半部分，到全局队列。因为需要加锁，所以slow
+// 移动本地队列的前半部分，到全局队列。因为需要加锁，所以函数叫 slow
 func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
     var batch [len(_p_.runq)/2 + 1]*g
 
@@ -360,7 +360,7 @@ func runqputslow(_p_ *p, gp *g, h, t uint32) bool {
 
 `P` 只在初始化的时候创建，数量为 `GOMAXPROCS`，一般建完就不会再变了，除非用户调用 `runtime.MAXGOPROCS` 调整 `P` 的数量。
 
-不过官方的注释已经明确的说明了 `runtime.MAXGOPROCS` 在后续改进调度器后会被移除。
+不过官方注释说 `runtime.MAXGOPROCS` 在后续改进调度器后会被移除。
 
 
 
@@ -386,7 +386,7 @@ func wakep() {
 // 获取空闲 M 或新建 M
 func startm(_p_ *p, spinning bool) {
   	nmp := mget()              // 获取空闲 M
-		if nmp == nil {        // 没有空闲 M，新建一个
+		if nmp == nil {            // 没有空闲 M，新建一个
         id := mReserveID()     // sched.mnext 字段记录了 M 的自增 ID；如果超出 sched.maxmcount(默认10000)，会 panic
 				newm(fn, _p_, id)
 				return
@@ -403,9 +403,9 @@ func newm(fn func(), _p_ *p, id int64) {
 func allocm(_p_ *p, fn func(), id int64) *m {
     mp := new(m)        // 创建M对象 
   	mp.mstartfn = fn    // 设置启动函数
-	mcommoninit(mp, id) // 初始化
+	  mcommoninit(mp, id) // 初始化
   
-	mp.g0 = malg(8192 * sys.StackGuardMultiplier) // 初始化g0
+	  mp.g0 = malg(8192 * sys.StackGuardMultiplier) // 初始化g0
     mp.g0.m = mp
 }
 
@@ -439,9 +439,12 @@ func newosproc(mp *m) {
 
 ## 调度 schedule
 
-1. 调度器每调度 `61` 次，从全局队列里取一次 `G`，以避免饥饿
-2. 调用 `runqget` 从 `P` 本地的运行队列中查找待执行的 `G`
-3. `findrunnable` ，依次从本地、全局、netpoll、偷窃里取 `G`
+`G` 是如何被轮换并执行的呢？
+
+1. 总体思路是：依次从 `P` 的本地 `G` 队列、全局 `G` 队列取
+2. 调度器每调度 `61` 次，从全局队列里取一次 `G`（以避免全局队列里有的 `G` 始终不被取出、饿死）
+3. 调用 `runqget` 函数从 `P` 本地的运行队列中查找待执行的 `G`
+4. 调用 `findrunnable` 函数从其他地方取 `G`（依次从本地队列、全局队列、netpoll、从其他 `P` 里偷窃取 `G`）
     - 再次从 `local runq` 获取 `G`
     - 去 `global runq` 获取（因为前面仅仅是1/61的概率）
     - 执行 `netpoll`，检查是否有 `IO` 就绪的 `G`
@@ -449,8 +452,8 @@ func newosproc(mp *m) {
         - 这里的随机用到了一种质数算法，保证既随机，每个 `P` 又都能被访问到
     - 偷窃前会将 `M` 的自旋状态设为 `true`，偷窃后再改回去
     - 如果多次尝试偷 `P` 都失败了，`M` 会把 `P` 放回 `sched` 的 空闲 `P` 数组，自身休眠（放回`M`池子）
-4. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的`P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime` 会新建一个 `M`。
-5. `execute`，执行代码。
+5. `wakep`, 另一种情况是，`M` 太忙了，如果 `P` 池子里有空闲的 `P`，会唤醒其他 `sleep` 状态的 `M` 一起干活。如果没有`sleep`状态的`M`，`runtime` 会新建一个 `M`。
+6. `execute`，执行代码。
 
 
 
@@ -493,7 +496,7 @@ top:
         gp, inheritTime = runqget(_g_.m.p.ptr())
     }
     
-    // 通过 findrunnable 从其他可能得地方寻找可执行 G
+    // 通过 findrunnable 函数从其他可能得地方寻找可执行 G
     if gp == nil {
         gp, inheritTime = findrunnable() // blocks until work is available
     }
@@ -532,9 +535,9 @@ func findrunnable() (gp *g, inheritTime bool) {
         }
     }
   
-    // Poll network. 这一步只是优化，跳过影响也不大
+    // Poll network. 这一步只是优化
     if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
-        // 跳过
+        // 略
     }
 
     // 从其他 P 偷窃
@@ -555,7 +558,7 @@ func findrunnable() (gp *g, inheritTime bool) {
 
 #### globrunqget
 
-在检查全局队列时，除返回一个可用 `G` 外，还会批量转移一批`G` 到 `P` 的本地队列。毕竟不能每次加锁去操作全局队列。
+在检查全局队列时，除返回一个可用 `G` 外，还会批量转移一批 `G` 到 `P` 的本地队列。毕竟不能每次加锁去操作全局队列。
 
 ```go
 // 从全局队列列取 G

@@ -1,3 +1,20 @@
+`go` 里使用了三个字段表示一个时间，`wall`，`ext`，和时区 `loc`
+
+```go
+// src/time/time.go
+type Time struct {
+    wall uint64
+    ext  int64
+    loc *Location
+}
+```
+
+初次看时比较奇怪，不是一个 `int` 类型的时间戳 + 时区就可以表示时间了吗，为什么用了 `wall` 和 `ext` 两个字段？
+
+这里就需要了解下墙上时钟和单调时钟的概念
+
+
+
 ### 墙上时钟 和 单调时钟
 
 墙上时钟即计算机系统的时钟，一般设成和NTP（Network Time Protocal，网络时间协议）同步，也可以人为修改，因此程序里如果依赖这个时间的话可能会出现时间倒退的现象。
@@ -8,17 +25,16 @@
 
 ### go 里的 Time
 
-`go` 里使用了三个字段表示一个时间，`wall`，`ext`，和时区 `loc`
+再回来看 `Time` 的结构
 
 ```go
+// src/time/time.go
 type Time struct {
-	wall uint64
-	ext  int64
-	loc *Location
+    wall uint64
+    ext  int64
+    loc *Location
 }
 ```
-
-
 
 其中 `wall` 的最高位是个标记位，用于存储是否包含单调时钟的信息。1表示包含，0表示不包含。根据这个位的01值，`wall` 和 `ext` 存储的数字会有不同的含义。
 
@@ -40,7 +56,7 @@ hasMonotonic = 1 << 63 // as a mask
 
 ![time 存储格式-2](assets/ae5a99bf24bd4403befa946c0f902ca4~tplv-k3u1fbpfcp-zoom-in-crop-mark:3024:0:0:0.awebp)
 
-这时由于不存储单调时间了，空间比较富裕，可以存储公元 1年开始的时间。`ext` 用于存储秒级的墙上时间，`wall` 里存储纳秒
+这时由于不存储单调时间了，空间比较富裕，可以存储公元 1年开始的时间。`ext` 用于存储秒级的墙上时间，`wall` 里存储纳秒部分
 
 
 
