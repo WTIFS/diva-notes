@@ -61,7 +61,7 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 
 所有的 `G` 都放在一个全局队列 `global runqueue` 里，`M` 不断从这个队列里取 `G` 并执行 `G` 里保存的任务。
 
-由于多个 `M` 都会从这个全局队列里获取 `G` 来进行运行。所以必须对全局队列加锁保证互斥。这必然导致多个 `M` 对锁的竞争。这也是老调度器最大的一个缺点。
+由于多个 `M` 都会从这个全局队列里获取 `G` 来进行运行，所以必须对该队列加锁保证互斥。这必然导致多个 `M` 对锁的竞争，这也是老调度器最大的一个缺点。
 
 其实老调度器有4个缺点：详见 [Scalable Go Scheduler Design Doc](https://docs.google.com/document/d/1TTj4T2JO42uD5ID9e89oa0sLKhJYD0Y_kqxDv3I3XMw)
 
@@ -81,9 +81,6 @@ Go 的调度器使用三个结构体来实现 `goroutine` 的调度：`G, M, P`�
 原来是一把大锁，锁定了全局协程队列这样一个共享资源，导致了很多激烈的锁竞争。如果我们要优化，很自然的就能想到，把锁的粒度细化来提高减少锁竞争，也就是把全局队列拆成局部队列。
 
 
-支撑整个调度器的主要有 4 个结构，分别是 `M、G、P、Schedt(schedule)`，前三个定义在 `runtime.h` 中，`Schedt` 定义在 `proc.c` 中。
-
-
 
 
 
@@ -98,20 +95,20 @@ type g struct {
     m            *m         // 当前 Goroutine 绑定的 M
     sched        gobuf      // 调度相关的数据，上下文切换时就更新这个
     preempt      bool       // 抢占信号，标记 G 是否应该停下来被调度，让给别的 G
-      timer        *timer     // 给 time.Sleep 用的 timer
+    timer        *timer     // 给 time.Sleep 用的 timer
     ...
     _panic       *_panic    // panic链表
-      _defer       *_defer    // defer链表
+    _defer       *_defer    // defer链表
 }
 ```
 - `G` 维护了 `goroutine` 需要的栈、程序计数器以及它所在的 `M` 等信息。
 - `G` 并非执行体，**仅保存并发任务状态**，为任务提供所需要的栈空间
-- `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待调度
-- `G` 使用完毕后会被放回缓存池里，等待复用。
-    - 因此存在 如果瞬发新建了大量 `G`，高峰后这些 `G` 会一直留着，不释放内存的问题。
-    - 二级缓存池：每个 `P` 里有本地 `G` 缓存，`schedt` 里还有个全局 `G` 缓存
+- `G` 创建成功后放在 `P` 的本地队列或者全局队列，等待被调度
+- `G` 使用完毕后会被放回缓存池里，等待被复用
+    - 因此存在：如果瞬发新建了大量 `G`，高峰后这些 `G` 会一直留着，不释放内存的问题。
+    - 两级缓存池：每个 `P` 里有本地 `G` 缓存，`schedt` 里还有个全局 `G` 缓存，共两级
     - `P` 里的缓存池是 `gFree` 字段， `G` 工作结束后（状态变为 `Gdead`），会放入这里。读写它不需要锁
-    - `P.gFree` 里的空闲 `G` 超过 `64` 个后，会分一半的到 `schedt.gFree` 里。`schedt.gFree` 又根据 `G` 的栈大小分成了两个队列
+    - `P.gFree` 里的空闲 `G` 超过 `64` 个后，会分一半的 `G` 到 `schedt.gFree` 里。`schedt.gFree` 又根据 `G` 的栈大小分成了两个队列
       - 为节省空间，`G` 的栈如果超过 `2KB`，那回收时不会保留它的栈，放入 `schedt.gFree.noStack` 里
       - 否则放入另一个队列 `schedt.gFree.Stack` 里
 
@@ -218,6 +215,7 @@ var (
 - 里面存放了空闲（即休眠） `M` 列表、空闲 `P` 列表、全局 `G` 队列、废弃的 `G` 队列
 
 ```go
+// runtime/runtime2.go
 type schedt struct {
     
     lock mutex 
