@@ -77,7 +77,7 @@ func socket(ctx context.Context, net string, family, sotype, proto int, ipv6only
 // listenStream()
 func (fd *netFD) listenStream(laddr sockaddr, backlog int, ctrlFn func(string, string, syscall.RawConn) error) error {
     syscall.Bind(fd.pfd.Sysfd, lsa)    // syscall.Bind() 将监听地址绑定到 socket 上
-    listenFunc(fd.pfd.Sysfd, backlog)  // syscall.Listen() 监听，backlog 参数控制连接队列长度
+    listenFunc(fd.pfd.Sysfd, backlog)  // syscall.Listen() 监听，backlog 参数控制连接队列长度，取自系统参数 /proc/sys/net/core/somaxconn
 }
 ```
 
