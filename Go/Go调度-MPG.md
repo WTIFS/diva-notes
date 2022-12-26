@@ -532,7 +532,7 @@ func findrunnable() (gp *g, inheritTime bool) {
         }
     }
   
-    // Poll network. 这一步只是优化
+    // 网络协程
     if netpollinited() && atomic.Load(&netpollWaiters) > 0 && atomic.Load64(&sched.lastpoll) != 0 {
         // 略
     }
