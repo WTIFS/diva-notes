@@ -174,7 +174,7 @@ func netpollinit() {
 `runtime_pollOpen()` 函数由 `runtime/netpoll.go/net_runtime_pollOpen()` 实现，底层调用 `epoll_ctl()` 函数，将 socket fd 放入 epoll 对象中监听，以便在和客户端的连接建立时得到通知
 ```go
 // runtime/netpoll.go
-//go:linkname poll_runtime_pollOpen internal/poll.runtime_pollOpen
+// go:linkname poll_runtime_pollOpen internal/poll.runtime_pollOpen
 func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
     errno := netpollopen(fd, pd)
 }
