@@ -177,7 +177,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb, const struct tcp
 // net/ipv4/tcp_ipv4.c
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
-    // 看看半连接队列是否满了
+    // 看看半连接队列是否满了，满了就丢弃
     if (inet_csk_reqsk_queue_is_full(sk) && !isn) {
         want_cookie = tcp_syn_flood_action(sk, skb, "TCP");
         if (!want_cookie)
@@ -207,6 +207,32 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
     }
 }
 ```
+
+
+
+#### SYN Flood攻击
+
+一般情况下，半连接的"生存"时间其实很短，只有在第一次和第三次握手间，如果半连接都满了，说明服务端疯狂收到第一次握手请求。如果是线上游戏应用，能有这么多请求进来，那说明你可能要富了。但现实往往比较骨感，你可能遇到了**SYN Flood攻击**。
+
+所谓**SYN Flood攻击**，可以简单理解为，攻击方模拟客户端疯狂发第一次握手请求过来，在服务端憨憨地回复第二次握手过去之后，客户端死活不发第三次握手过来，这样做，可以把服务端半连接队列打满，从而导致正常连接不能正常进来。
+
+那这种情况怎么处理？有没有一种方法可以**绕过半连接队列**？
+
+有，上面的代码里可以看到一个 `tcp_syn_flood_action`函数，里面读取的是内核的 `proc/sys/net/ipv4/tcp_syncookies` 参数。
+
+当它被设置为1的时候，客户端发来**第一次握手**SYN时，服务端**不会将其放入半连接队列中**，而是通过**通信双方的IP地址端口、时间戳、MSS**等信息实时计算一个 `cookies`，保存在**TCP报头**的 `seq` 里。这个`cookies`会跟着**第二次握手**，发回客户端。客户端在发**第三次握手**的时候带上这个`cookies`，服务端验证到它就是当初发出去的那个，就会建立连接并放入到全连接队列中。可以看出整个过程不再需要半连接队列的参与。
+
+
+
+#### cookies方案为什么不直接取代半连接队列
+
+`cookies` 方案虽然能防 **SYN Flood攻击**，但是也有一些问题。因为服务端并不会保存连接信息，所以如果传输过程中数据包丢了，也不会重发第二次握手的信息。
+
+另外，编码解码`cookies`，都是比较**耗CPU**的，利用这一点，如果此时攻击者构造大量的**第三次握手包（ACK包）**，同时带上各种瞎编的`cookies`信息，服务端收到`ACK包`后**以为是正经cookies**，憨憨地跑去解码（**耗CPU**），最后发现不是正经数据包后才丢弃。
+
+这种通过构造大量 `ACK包` 去消耗服务端资源的攻击，叫**ACK攻击**，受到攻击的服务器可能会因为**CPU资源耗尽**导致没能响应正经请求。
+
+
 
 
 
@@ -278,6 +304,25 @@ static struct sock *tcp_v4_hnd_req(struct sock *sk, struct sk_buff *skb)
 }
 ```
 
+
+
+```c
+// net/ipv4/inet_connection_sock.c
+// 从半连接队列里根据IP和端口找之前半连接的sock
+struct request_sock *inet_csk_search_req(const struct sock *sk, struct request_sock ***prevp,
+					 const __be16 rport, const __be32 raddr, const __be32 laddr)
+{
+    for (prev = &lopt->syn_table[inet_synq_hash(raddr, rport, lopt->hash_rnd, lopt->nr_table_entries)];
+         (req = *prev) != NULL;
+	     prev = &req->dl_next) {
+    }
+}
+```
+
+这里可以看到，半连接队列并不是用队列实现的，而是用哈希表，根据地址、端口等参数计算了个哈希函数。这样就可以 O(1) 时间查找到半连接。
+
+
+
 ```c
 // net/ipv4/tcp_minisocks.c
 struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
@@ -303,7 +348,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 
 # 服务器 accept
 
-最后 accept 一步长话短说。
+最后 accept 一步就是从全连接队列里取个连接出来处理。这个队列则是用链表实现的。因为服务端此时并不关心具体是哪个连接，直接从队列头取一个出来处理就行了。
 
 ```c
 //  net/ipv4/inet_connection_sock.c
@@ -317,6 +362,8 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err)
     return newsk;
 }
 ```
+
+
 
 
 
