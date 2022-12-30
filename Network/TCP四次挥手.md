@@ -107,7 +107,7 @@ int shutdown(int sock, int howto)
 
 #### 参考
 
-> [GitHubPorn - 关于三次握手和四次挥手](https://www.zhihu.com/question/271701044/answer/1935194322)
+> [猿人谷 - 关于三次握手和四次挥手](https://blog.csdn.net/hyg0811/article/details/102366854)
 >
 > [小白debug - 活久见！TCP两次挥手，你见过吗？那四次握手呢？](https://mp.weixin.qq.com/s/Z0EqSihRaRbMscrZJl-zxQ)
 
