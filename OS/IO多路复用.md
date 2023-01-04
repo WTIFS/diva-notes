@@ -16,25 +16,13 @@ while(1) {
 }
 ```
 
+把服务端处理请求的细节展开，得到如下图所示的同步阻塞网络 IO 的数据接收流程：
 
-
-<img src="assets/640.gif" alt="img" style="zoom: 67%;" />
-
-
-
-可以看到，服务端的线程阻塞在了两个地方，一个是 `accept` 函数，一个是 `read` 函数。
-
-如果再把 `read` 函数的细节展开，我们会发现其阻塞在了两个阶段：从网卡复制到内核缓冲区，和从内核复制到用户缓冲区。
-
-
-
-<img src="assets/641.gif" alt="641" style="zoom: 50%;" />
+![img](assets/io_blocking.jpeg)
 
 
 
 这就是传统的阻塞 IO。如果这个连接的客户端一直不发数据，那么服务端线程将会一直阻塞在 `read` 函数上不返回，也无法接受其他客户端连接。
-
-这肯定是不行的。
 
 
 
@@ -42,7 +30,7 @@ while(1) {
 
 为了解决上面的问题，其关键在于改造这个 `read` 函数。
 
-有一种办法是，每次都创建一个新的进程或线程，去调用 `read` 函数，并做业务处理。这样当给一个客户端建立好连接后，就可以立刻等待新的客户端连接，而不用阻塞在原客户端的 `read` 请求上。
+有一种办法是，每次都创建一个新的进程或线程，去调用 `read` 函数（单进程对单连接）。这样当给一个客户端建立好连接后，就可以立刻等待新的客户端连接，而不用阻塞在原客户端的 `read` 请求上。
 
 不过，这不叫非阻塞 IO，只不过用了多线程的手段使得主线程没有卡在 `read` 函数上不往下走罢了。操作系统为我们提供的 `read` 函数仍然是阻塞的。并且无限制的开新线程，很容易导致资源被耗光。
 
@@ -68,6 +56,8 @@ int n = read(connfd, buffer) != SUCCESS);  // read函数
 非阻塞的 `read`，指的是在数据到达前，即数据还未到达网卡，或者到达网卡但还没有拷贝到内核缓冲区之前，这个阶段是非阻塞的。
 
 当数据已到达内核缓冲区，此时调用 `read` 函数仍然是阻塞的，需要等待数据从内核缓冲区拷贝到用户缓冲区，才能返回。
+
+也就是说，非阻塞IO模型将原来的两处阻塞变成了一处阻塞。
 
 整体流程如下图
 
@@ -127,7 +117,15 @@ int select(
 
 
 
-服务端代码，这样来写。首先一个线程不断接受客户端连接，并把 `socket fd` 放到一个 `list` 里。
+`fd` (file descriptor) 文件描述符是一个非负整数，可视为文件的ID/身份证号。
+
+`fd_set` 是一个默认总大小为 `__FD_SETSIZE = 1024` 的 bitmap ( `[32]int64`)，每位可标记一个 `fd`
+
+`select` 内部会遍历前 `nfds` 个 `fd`，对每个 ` fd` 判断是否就绪，如果就绪，则修改相应 `fd_set` 上对应的位为 1
+
+
+
+服务端代码，这样来写。首先一个线程不断接收客户端连接，并把 `socket fd` 放到一个 `list` 里。
 
 ```c
 while(1) {
@@ -152,13 +150,12 @@ while(1) {
 
 ```c
 while(1) {
-    nready = select(list);
+    nready = select(max + 1, &fd_set, NULL, NULL, NULL)
     // 用户层依然要遍历，只不过少了很多无效的系统调用
     for (fd <-- fdlist) {
-        // 原先是if (read(fd) != -1)，这里调用select后，操作系统给就绪的fd做了标记，不需要再通过read判断了
-        if (fd != -1) { 
+        if (FD_ISSET(fd[i], &fd_set)) { // // fd_set中为1的位置表示的连接，意味着有数据到达，可以让用户进程读取
             read(fd, buf);
-            if(--nready == 0) break; // 总共只有 nready 个已就绪描述符，不用过多遍历
+            if(--nready == 0) break; 
         }
     }
 }
@@ -168,13 +165,13 @@ while(1) {
 
 
 
-可以看出几个细节（这几点将在 `epoll` 中得到优化）：
+可以看出几个问题（这几点将在 `epoll` 中得到优化）：
 
-1. `select` 调用需要传入 `fd` 数组，需要拷贝一份到内核，高并发场景下这样的拷贝消耗的资源是惊人的。（可优化为不复制）
+1. `select` 调用时会陷入内核，需要将传参中的 `fd_set` 拷贝到内核空间；`select` 执行完毕后，还需要将 `fd_set` 从内核拷贝回用户空间；高并发场景下这样的拷贝消耗的资源是惊人的。（epoll优化为不拷贝）
 
-2. `select` 在内核层仍然是通过遍历的方式检查 `fd` 的就绪状态，是个同步过程，只不过无系统调用切换上下文的开销。（内核层可优化为异步事件通知）
+2. `select` 在内核层仍然是通过遍历的方式检查每个 `fd` 的就绪状态，是个同步过程，只不过无系统调用切换上下文的开销。（epoll优化为异步事件通知）
 
-3. `select` 仅仅返回可读文件描述符的个数，具体哪个可读还是要用户自己遍历。（可优化为只返回给用户就绪的文件描述符，无需用户做无效的遍历）
+3. `select` 仅仅返回可读文件描述符的个数，具体哪个可读还是要用户自己遍历。（epoll为只返回给用户就绪的文件描述符，无需用户做无效的遍历）
 
 
 
@@ -188,15 +185,15 @@ while(1) {
 
 ## poll
 
-`poll` 的实现和 `select` 非常相似，只是描述 `fd` 集合的方式不同，`select` 使用了一个10位的 `int` 结构 `fd_set` 作为文件描述符，因此最多只能监听 `2^10 = 1024` 个 `fd`。`poll` 改用了一个链表  `pollfd` ，因此没有这个限制。和 `select` 相比只是实现细节上的区分，并没有本质上的区别。
+`poll` 的实现和 `select` 非常相似，只是描述 `fd` 集合的方式不同，`select` 使用了数组作为 `fd_set`，设置了最大大小为 1024个。`poll` 改用了一个链表  `pollfd` ，因此没有这个限制。和 `select` 相比只是实现细节上的区分，并没有本质上的区别。
 
 ```c
 int poll(struct pollfd *fds, nfds_tnfds, int timeout);
 
 struct pollfd {
-    intfd;        /*文件描述符*/
-    shortevents;  /*监控的事件*/
-    shortrevents; /*监控事件中满足条件返回的事件*/
+    int   fd;      /*文件描述符*/
+    short events;  /*监控的事件*/
+    short revents; /*监控事件中满足条件返回的事件*/
 };
 ```
 
@@ -206,58 +203,79 @@ struct pollfd {
 
 `epoll` 是最终的大 `boss`，它解决了 `select` 和 `poll` 的一些问题。
 
-还记得上面说的 `select` 的三个细节么？
+上面说了 `select` 的三个问题， `epoll` 主要就是针对这三点进行了改进。
 
-1. `select` 调用需要传入 `fd` 数组，需要拷贝一份到内核，高并发场景下这样的拷贝消耗的资源是惊人的。（可优化为不复制）
+1. 内核中使用红黑树保存一份文件描述符集合，每个文件描述符只在添加时传入一次，无需每次调用 `select` 时都整体重新传入
+   1. 解决了`select` 中 `fd_set` 重复拷贝到内核的问题
 
-2. `select` 在内核层仍然是通过遍历的方式检查 `fd` 就绪状态，是个同步过程，只不过无系统调用切换上下文的开销。（内核层可优化为异步事件通知）
+2. 内核不再通过轮询的方式找到就绪的文件描述符，而是通过异步 IO 事件唤醒
 
-3. `select` 仅仅返回可读文件描述符的个数，具体哪个可读还是要用户自己遍历。（可优化为只返回给用户就绪的文件描述符，无需用户做无效的遍历）
-
-
-
-所以 `epoll` 主要就是针对这三点进行了改进。
-
-1. 内核中保存一份文件描述符集合，无需每次调用 `select` 时都重新传入，只需告诉内核修改的部分即可。
-
-2. 内核不再通过轮询的方式找到就绪的文件描述符，而是通过异步 IO 事件唤醒。
-
-3. 内核仅会将有 IO 事件的文件描述符返回给用户，用户也无需遍历整个文件描述符集合。
+3. 内核仅会将有 IO 事件的文件描述符返回给用户，用户也无需遍历整个文件描述符集合
 
 
 
 具体，操作系统提供了这三个函数。
 
-第一步，创建一个 `epoll` 处理器
-
 ```c
-int epoll_create(int size);
-```
+// 创建epoll内核对象，内含红黑树结构用于管理fd
+int epoll_create(int size) 
 
-第二步，向内核添加、修改或删除要监控的文件描述符
-
-```c
-// 通过该函数，直接向内核中写入文件描述符，不需要像 select 用时每次拷贝大批文件描述符
+// 向epoll对象中添加 fd
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
-```
 
-第三步，类似发起了 `select()` 调用
-
-```c
+// 将就绪的fd放入events数组，并返回就绪fd数量
 int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout);
 ```
 
-使用起来，其内部原理就像如下一般丝滑。
+
+
+使用方法如下：
+
+```c
+int epfd = epoll_create(10); // 创建一个 epoll 对象
+
+for(i = 0; i < 5; i++)
+      {
+          static struct epoll_event ev;
+          ev.data.fd = accept(sock_fd, (struct sockaddr *)&client_addr, &sin_size);  
+          ev.events = EPOLLIN;
+          epoll_ctl(epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);  // 向 epoll 对象中添加要管理的连接 
+      }
+
+struct epoll_event events[5];
+while(1)               
+{
+        nfds = epoll_wait(epfd, events, 5, 10000);   // 等待连接
+        for (i=0; i<nfds; i++)
+        {
+            read(events[i].data.fd, buff, MAXBUF)
+        }
+}
+```
 
 <img src="assets/646.gif" alt="646" style="zoom:67%;" />
 
-`epoll` 利用 `epoll_ctl` 来插入或者删除一个 `fd`，实现用户态到内核态的数据拷贝，这确保了每一个 `fd` 在其生命周期只需要被拷贝一次，而不是每次调用 `epoll_wait` 的时候都拷贝一次。相比 `select & poll` 需要把全部监听的 `fd` 集合从用户态拷贝至内核态的做法，效率高出了一大截。
+`epoll对象` 主要结构体如下：
 
-在实现上 `epoll` 采用**红黑树**来存储所有监听的 `fd`，红黑树本身插入和删除性能比较稳定，时间复杂度 `O(logN)`。通过 `epoll_ctl` 函数添加进来的 `fd` 都会被放在红黑树的某个节点内，所以，重复添加是没有用的。
+```c
+struct eventpoll {
+    wait_queue_head_t wq;      // 等待队列链表，存放阻塞的进程。数据就绪后会回这里找之前阻塞的进程，恢复执行
+    struct rb_root rbr;        // 红黑树，管理用户进程下添加进来的所有 socket 连接
+    struct list_head rdllist;  // 数据就绪的文件描述符链表。这样应用进程只需要读该链表，而不需要读整棵树。
+}
+```
+
+<img src="assets/epoll_obj.jpeg" alt="img" style="zoom:30%;" />
+
+
+
+`epoll` 采用**红黑树**来存储所有监听的 `fd`，红黑树本身插入和删除性能比较稳定，时间复杂度 `O(logN)`。
+
+`epoll` 利用 `epoll_ctl` 来插入或者删除一个 `fd`，实现用户态到内核态的数据拷贝，这确保了每一个 `fd` 在其生命周期只需要被拷贝一次，而不是每次调用 `epoll_wait` 的时候都拷贝一次。相比 `select & poll` 需要把全部监听的 `fd` 集合从用户态拷贝至内核态的做法，效率高出了一大截。
 
 当把 `fd` 添加进来的时候时候会完成关键的一步：该 `fd` 会与相应的设备（网卡）驱动程序建立回调关系，也就是在内核中断处理程序为它注册一个回调函数，在 `fd` 相应的事件触发（中断）之后（设备就绪了），内核就会调用这个回调函数，该回调函数在内核中被称为： `ep_poll_callback` 。这个回调函数其实就是把这个 `fd` 添加到一个双向链表（就绪链表） `rdllist` 中。
 
-`epoll_wait` 实际上就是去检查 `rdllist` 链表是否为空，不空说明有就绪的 `fd`，直接返回这个链表给调用者使用。为空时挂起当前进程，一直阻塞等着，直到非空时进程才被唤醒并返回。这种回调机制能够准确的通知程序要处理的事件，而不需要循环遍历检查数据是否到达。
+`epoll_wait` 实际上就是去检查 `rdllist` 链表是否为空，不空说明有就绪的 `fd`，从 `wq` 里找到并唤醒之前阻塞的用户进程，把 `rdllist` 中就绪的 `fd` 返回给该进程，让进程调用 `recv` 把已经到达内核 socket 等待队列的数据拷贝到用户空间使用。
 
 
 
@@ -307,7 +325,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout
 
 # 总结
 
-1. 如果不使用内核提供的 `IO多路复用`，我们需要遍历每个连接 `fd`，调用内核的 `read` 方法判断 `fd` 的就绪状态。对于那些未就绪的 `fd`，每次 `read` 都是无效且耗费资源的操作
+1. 如果不使用内核提供的 IO多路复用，我们需要遍历每个连接 `fd`，调用内核的 `read` 方法判断 `fd` 的就绪状态。对于那些未就绪的 `fd`，每次 `read` 都是无效且耗费资源的操作
 2. 通过 `select` 方法，我们可以将一批 `fd` 交给内核，内核来进行遍历。内核会给就绪的 `fd` 打上标记，我们再遍历一次 `fd`列表，处理其中就绪的 `fd` 就可以了。相比1来说，省去了每次循环里用户态切到内核态再调用 `read` 的开销
 3. `poll` 方法去掉了 `select` 只能监听 1024 个 `fd` 的限制
 4. `epoll`  方法对 `select` 的一些缺点进行了优化，如：
@@ -323,7 +341,7 @@ int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout
 
 IO多路复用，复用的是什么？目的是什么？
 
-- 进程 / 线程。使用同一进程 / 线程处理多个连接。目的是使用很少的 CPU、内存资源就可以处理很多的连接，降低系统负载
+- 复用的是进程。相比单进程单连接的处理方法，IO多路复用使用2个线程即可处理多个连接（一个把连接放入队列，一个从队列中取出处理）。目的是1减少进程数量，2减少阻塞次数，3减少无用遍历和复制，提高程序效率
 
 UNIX、MacOS 下没有 `epoll`，取而代之的是 `kqueue`，实现和 `epoll` 类似
 
@@ -338,4 +356,6 @@ UNIX、MacOS 下没有 `epoll`，取而代之的是 `kqueue`，实现和 `epoll`
 [同步非阻塞的讨论](https://github.com/CyC2018/CS-Notes/issues/194)
 
 [小林coding - IO 多路复用是什么意思？](https://www.zhihu.com/question/32163005)
+
+[mingguangtu - 深入学习IO多路复用 select/poll/epoll 实现原理](https://cloud.tencent.com/developer/article/2188691)
 

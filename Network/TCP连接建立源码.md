@@ -348,7 +348,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 
 # 服务器 accept
 
-最后 accept 一步就是从全连接队列里取个连接出来处理。这个队列则是用链表实现的。因为服务端此时并不关心具体是哪个连接，直接从队列头取一个出来处理就行了。
+最后 accept 一步就是从全连接队列里取个连接出来处理。和半连接队列用 hashmap 实现不同，这个队列则是用链表实现的。因为服务端此时并不关心具体是哪个连接，直接从队列头取一个出来处理就行了。
 
 ```c
 //  net/ipv4/inet_connection_sock.c

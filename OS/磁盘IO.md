@@ -16,6 +16,8 @@ int main() {
 
 2、如果发生了磁盘 IO，那发生的是多大的 IO ？
 
+
+
 # Linux IO 栈
 
 观察下图 Linux IO 栈的简化版本：

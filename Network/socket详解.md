@@ -10,7 +10,7 @@ sock_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
 该方法会返回 `socket_fd`，它是 socket文件的句柄，是个数字，相当于 socket的身份证号。
 
-得到了 `socket_fd`之后，对于服务端，就可以依次执行 `bind()`, `listen()`, `accept()`方法，然后坐等客户端的连接请求。
+得到了 `socket_fd` 之后，对于服务端，就可以依次执行 `bind()`, `listen()`, `accept()`方法，然后坐等客户端的连接请求。
 
 对于客户端，得到 `socket_fd`之后，你就可以执行 `connect()`方法向服务端发起建立连接的请求，此时就会发生TCP三次握手。
 

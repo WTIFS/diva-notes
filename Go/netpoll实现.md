@@ -296,7 +296,7 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 netpoll 实际上是 epoll + Go调度器 二者的结合。有如下优缺点：
 ### 优点
 1. 每个 goroutine 监听一个 TCP连接，轻量且支持海量
-   1. 当连接上没有数据到达时，goroutine 会被 `gopark()` 函数阻塞。该阻塞不会陷入内核态，也不阻塞 M，M 可以寻找别的 G 执行，开销极小
+   1. 当连接上没有数据到达时，goroutine 会被 `gopark()` 函数阻塞。该阻塞不会陷入内核态，也不阻塞 M，M 可以寻找别的 G 执行，切换 G的开销极小
    2. 有数据到达时，再通过运行时调度处理连接
 2. 底层调用 epoll IO多路复用机制，较为高效
 ### 不足
