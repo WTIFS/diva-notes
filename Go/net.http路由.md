@@ -57,5 +57,17 @@ type node struct {
 	handlers  HandlersChain  // 处理该url的handlers数组
   ...
 }
+
+// 注册路由
+func (engine *Engine) addRoute(method, path string, handlers HandlersChain) {
+	// gin里是每个方法一棵树，如 GET/POST/PUT 分别一棵
+  root := engine.trees.get(method)
+  if root == nil {
+    root = new(node)
+    root.fullPath = "/"
+    engine.trees = append(engine.trees, methodTree{method: method, root: root})
+  }
+  root.addRoute(path, handlers)
+}
 ```
 
