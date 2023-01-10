@@ -70,7 +70,11 @@ LAN: Wide Area Network，广域网
 
 `MSS`: Max Segment Size，最大报文段长度
 
-`RTT`: Round Trip Time往返时延
+`RTT`: Round Trip Time，往返时延
+
+`SSL`: Secure Socket Layer，安全套接字层。又Netscape开发的专门用户保护Web通讯的协议层，最新版本为3.0，通过互相认证、使用数字签名确保完整性
+
+`TLS`: Transport Layer Security，传输层安全协议。是IETF (Internet Engineering Task Force，Internet工程任务组) 制定的一种新的协议。最新版本的TLS 1.0 建立在SSL 3.0协议规范之上，可以理解为SSL 3.1
 
 
 
