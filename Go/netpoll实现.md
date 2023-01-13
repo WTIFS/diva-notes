@@ -180,9 +180,12 @@ func poll_runtime_pollOpen(fd uintptr) (*pollDesc, int) {
 }
 ```
 
+这里可以看到通过常量 `_EPOLLET` 将 epoll 设置为了边缘触发 (Edge Triggered) 模式，并将 fd 通过 `epollctr` 放入 epoll 对象中管理。
+
 ```go
 // runtime/netpoll_epoll.go
 func netpollopen(fd uintptr, pd *pollDesc) int32 {
+    ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET // EPOLLET -> Edge Triggered 边缘触发模式
     return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev) // 实际调用 linux epoll_ctl()
 }
 ```
@@ -193,7 +196,7 @@ func netpollopen(fd uintptr, pd *pollDesc) int32 {
 
 `listen.Accept()` 的逻辑主要是：
 
-1. 调用系统函数 `accept()` 等待并接收连接
+1. 轮询调用系统函数 `accept()` 等待并接收连接
 2. 连接到来后，调用 `epollcreate()` 和 `epollctl()` （和上面一样）管理 socket
 
 ```go
@@ -216,6 +219,8 @@ func (fd *netFD) accept() (netfd *netFD, err error) {
     netfd.init() // 这个和前面的 init() 一样，创建和维护 epoll 对象
 }
 ```
+
+下面这里是个 `for循环`，轮询调用 `accept` 函数。因为我们在 `Listen` 的时候已经把对应的 `Listener fd` 设置成非阻塞I/O了，所以调用`accept` 这一步是不会阻塞的。只是下面会进行判断，根据判断 `err ==syscall.EAGAIN` 来调用fd.pd.waitRead阻塞住用户程序。
 
 ```go
 // poll/fx_unix.go
@@ -293,7 +298,7 @@ func netpollready(toRun *gList, pd *pollDesc, mode int32) {
 
 ## 总结
 
-netpoll 实际上是 epoll + Go调度器 二者的结合。有如下优缺点：
+netpoll 底层就是对I/O多路复用的封装，是 I/O多路复用 + Go调度器 二者的结合。不同平台对I/O多路复用有不同的实现方式，Go 在不同平台上 netpoll 调用的底层实现也不一样。比如Linux 下使用 epoll，macOS 则是 kqueue，而 Windows 是基于异步I/O实现的 ICOP。基于这些背景，
 ### 优点
 1. 每个 goroutine 监听一个 TCP连接，轻量且支持海量
    1. 当连接上没有数据到达时，goroutine 会被 `gopark()` 函数阻塞。该阻塞不会陷入内核态，也不阻塞 M，M 可以寻找别的 G 执行，切换 G的开销极小
