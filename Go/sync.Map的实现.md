@@ -1,5 +1,5 @@
 # 概述
-其实底层还是用的 `map`，就是对 `map` 做了封装。主要思想是做分区，底层用了2个 `map`，`read` 和 `dirty`，将频繁变更的数据，和极少变更的数据分离。
+和 JAVA 中 `concurrent hashmap` 分段的设计思路不同，`sync.Map` 的主要思想是做读写分离，底层用了2个 `map`，`read` 和 `dirty`，将频繁变更的数据，和极少变更的数据分离。
 
 极少变更的数据放到 `read` 里，读 `read` 无需加锁，更新 `read` 依靠 `CAS` 也不用加锁，性能极高。
 
@@ -70,7 +70,7 @@ p有三种值：
 
 先查找 `read` ，`read` 中没有再查找 `dirty` ，并增加 `cache misses` 计数
 
-`cache misses` 数量累计至 `dirty` 的长度后，将 `dirty` 数据迁移至 `read` 中
+`cache misses` 数量累计至 `dirty` 的长度后，将 `dirty` 清空，所有数据迁移至 `read` 中
 
 ```go
 // src/sync/map.go
@@ -122,9 +122,9 @@ func (m *Map) missLocked() {
 
 ## 新增和更新
 
-如果 `read` 中已有 `key`，通过 `CAS` 来更新值；
+如果 `read` 中已有 `key`，通过 `CAS` 来更新值
 
-新增 `key`，或者更新 `dirty` 中的数据，需要加锁并写入 `dirty`
+新增 `key`，或者更新 `dirty` 中的数据，需要加锁并写入 `dirty`。其中新增 `key` 时还会把 `read` 中的 kv 倒灌回 `dirty`
 
 ```go
 // src/sync/map.go
@@ -156,6 +156,18 @@ func (m *Map) Store(key, value interface{}) {
     }
     m.mu.Unlock()
 }
+
+func (e *entry) tryStore(i *any) bool {
+	  for {
+		    p := atomic.LoadPointer(&e.p)
+		    if p == expunged {
+			      return false
+		    }
+		    if atomic.CompareAndSwapPointer(&e.p, p, unsafe.Pointer(i)) {
+			      return true
+		    }
+	  }
+}
 ```
 
 
@@ -166,13 +178,20 @@ func (m *Map) Store(key, value interface{}) {
 
 
 
-
 # 总结
-1. 空间换时间：通过冗余的两个数据结构 (read、dirty)，减少加锁对性能的影响。
-2. 使用只读数据 (read)，避免读写冲突。
-3. 动态调整，miss 次数多了之后，将 dirty 数据迁移到read中。
-4. double-checking。
-5. 优先从 read 读取、更新、删除，因为对 read 的读取不需要锁。
-7. 适合读多写少的场景。写多的情况下，仍然会频繁的加锁，且是全局锁。写多的场景，可以借鉴 `java 1.7 concurrent hashmap` 的实现方法，使用分段锁，降低锁粒度。也有人这么做了，如 [concurrent-map](https://github.com/orcaman/concurrent-map)
 
+仅建议用于如下两种场景：
+
+1. 写一次，读多次。比如程序初始化时加载配置。
+2. 多协程环境下，不同协程读写不同的key。
+
+这两种场景下，相比于使用原生map + 全局锁的情况，`sync.Map` 能显著优化加锁带来的性能开销。
+
+
+
+# 问题
+
+既然读写 `read` 可以 `CAS`，那只要 `read` 不要 `dirty` 可不可以？
+
+- 那同原生 `map` 就没有区别了。`sync.Map` 中，`read` 仅用于读和更新已有 `key`（这俩场景才能用 `CAS`），无法用于新增 `key` 和触发扩容，后者的场景就需要用到 `dirty` 了。
 
