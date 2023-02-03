@@ -2,7 +2,7 @@
 
 1. 开放地址法
    - 放入元素，如果发生冲突，就往后找没有元素的位置
-2. 链表法
+2. 链表法 / 拉链法
    - `hashcode` 相同的串成链表。`Go、JAVA` 采用的方法
 3. 再哈希
    - 用另一个方法计算 `hashcode`。布谷鸟过滤器使用的方法
@@ -20,12 +20,12 @@
 type hmap struct {
     count     int    // 元素个数，调用 len(map) 时，直接返回此值
     flags     uint8  // 并发读写的状态标志，如果 =1 时读写这个 map，会 panic
-    B         uint8  // log2(桶数)，也就是说 buckets 数组的长度就是 2^B
+    B         uint8  // 桶数量的log2对数，也就是说 buckets 数组的长度是 2^B
     noverflow uint16 // 溢出的 bucket 个数
     hash0     uint32 // 哈希种子
 
     buckets    unsafe.Pointer // 指向桶数组，大小为 2^B
-    oldbuckets unsafe.Pointer // 旧桶的地址，用于扩容
+    oldbuckets unsafe.Pointer // 旧桶的地址，用于扩容时保存扩容前的数据
     nevacuate  uintptr        // 指示扩容进度，小于此地址的 buckets 迁移完成
     overflow *[2]*[]*bmap     // map 里不含指针时，用这个存 buckets 和 oldbuckets 的溢出区。这样 GC 时只扫描这里就可以，不用扫描整个所有 buckets
 }
@@ -33,7 +33,7 @@ type hmap struct {
 
 `buckets` 是一个指针，指向的是一个 `bmap` 数组。下文将 `bmap` 称为 **桶**。每个桶里有 `8` 个位置可以放 `key` 和 `value`，下文称这 8 个位置为 **格子**.
 
-这个结构有点像火车，每个 `map` 里有 `2^B` 条火车 `buckets`，每条火车由一堆车厢 `bmap` 串联。每个车厢里 `8` 个座位。
+这个结构有点像火车，每个 `map` 里有 `2^B` 辆火车 `buckets`，每条火车由一堆车厢 `bmap` 串联。每个车厢里 `8` 个座位。
 
 ```golang
 type bmap struct {
@@ -47,11 +47,11 @@ type bmap struct {
 
 `bmap` 就是我们常说的桶，桶里面会最多装 `8` 个 `key`。在桶内，又会根据 `key` 计算出来的 `hash` 值的高 `B` 位来查找 `key`，这高 `B` 位称为 `tophash`。
 
-如果桶里的元素要超过 `8` 个了，这时候需要在桶后面挂上 **溢出桶** `overflow bucket`。当然，也有可能是在 `overflow bucket` 后面再挂上一个 `overflow bucket`。这就说明，太多 `key` hash 到了此 `bucket`。
+如果桶里的元素要超过 `8` 个了，这时候需要在桶后面挂上 **溢出桶**  `overflow bucket`。溢出桶是在 Go 语言还使用 C 语言实现时使用的设计[3](https://draveness.me/golang/docs/part2-foundation/ch03-datastructure/golang-hashmap/#fn:3)，由于它能够减少扩容的频率所以一直使用至今。
 
-注意到 `key` 和 `value` 是各自放在一起的，并不是 `key/value/key/value/...` 这样的形式。这样的好处是在某些情况下可以避免内存对齐，节省空间。
+注意到 `key` 和 `value` 是各自放在一起 `k/k/.../v/v/...` 这样的形式，并不是 `k/v/k/v/...` 这样的。这样的好处是在某些情况下可以避免内存对齐，节省空间。
 
-比如 `map[int64]int8` 这样的 `map`，如果按照 `key/value/key/value/...` 这样的模式存储，那在每一个 `key/value` 对之后都要额外 `padding` 7 个字节；而 `key/key/.../value/value/...`这种形式则只需要在最后添加 `padding`。
+比如 `map[int64]int8` 这样的 `map`，如果按照 `k/v/k/v/...` 这样的模式存储，那在每一个 `key/value` 对之后都要额外对齐 7 个字节；而 `k/k/.../v/v/...` 这种形式则只需要在最后添加对齐空格。
 
 
 
