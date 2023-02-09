@@ -489,7 +489,7 @@ func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, blo
 以下均不考虑 `select: case <- chan` 的情况
 
 1. 读空的 `channel`
-2. 写阻塞 `channel` / 写入数据超过缓冲区 
+2. 写无缓冲 `channel` / 写有缓冲 `channel` 但数据超过缓冲区 
 3. 读写 `nil channel`（阻塞。主线程下会导致 `fatal error: all goroutines are asleep`）
 
 | 操作        | nil channel | 正常 channel | 已关闭 channel |
@@ -522,7 +522,7 @@ x, ok := <- t //0, false
 
 
 
-写阻塞 `channel`，阻塞
+写无缓冲 `channel`，阻塞
 
 ```go
 t := make(chan int)
