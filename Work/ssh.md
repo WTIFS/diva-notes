@@ -4,6 +4,7 @@
 
 ```
 ssh-copy-id -p 端口 -i ~/.ssh/id_rsa.pub 用户名字@192.168.x.xxx
+
 ```
 
 
@@ -13,5 +14,16 @@ ssh-copy-id -p 端口 -i ~/.ssh/id_rsa.pub 用户名字@192.168.x.xxx
 ```bash
 vim ~/.ssh/authorized_keys
 # 将本机的 id_rsa.pub 贴入
+```
+
+
+
+ssh连接无操作一段时间会断开怎么办？
+
+```bash
+# 修改 /etc/ssh/sshd_config文件
+# 每60秒连接一下服务器，最大重试次数为5次
+ClientAliveInterval 60
+ClientAliveCountMax 5
 ```
 
