@@ -407,78 +407,80 @@ type scase struct {
 }
 ```
 
-`select - case` 则会被编译为对 `selectgo` 函数的调用。里面将所有 `case` 组成了一个 `scase` 数组，以随机顺序遍历这个数组，如果能读写数据，就返回；否则新建一个 `sudog` 放到 `scase.c` 这个 `channel ` 的等待队列里，等待唤醒。如果所有 `scase` 里都没值，则最后执行 `default`。
+`select - case` 则会被编译为对 `selectgo` 函数的调用。里面将所有 `case` 组成了一个 `scase` 数组，以随机顺序遍历这个数组。
+如果能读写数据，就返回
+否则新建一个 `sudog` 放到 `scase.c` 这个 `channel ` 的等待队列里，等待唤醒。
+如果所有 `scase` 里都没值，则最后执行 `default`。
 
 ```go
 func selectgo(cas0 *scase, order0 *uint16, pc0 *uintptr, nsends, nrecvs int, block bool) (int, bool) {
-	cas1 := (*[1 << 16]scase)(unsafe.Pointer(cas0))      // case 数组
-	order1 := (*[1 << 17]uint16)(unsafe.Pointer(order0)) // 顺序数组
+    cas1 := (*[1 << 16]scase)(unsafe.Pointer(cas0))      // case 数组
+    order1 := (*[1 << 17]uint16)(unsafe.Pointer(order0)) // 顺序数组
 
     ncases := nsends + nrecvs                            // case 数量
-	scases := cas1[:ncases:ncases]                       // case 数组
-	pollorder := order1[:ncases:ncases]                  // 遍历顺序
-	lockorder := order1[ncases:][:ncases:ncases]         // 加锁顺序
+    scases := cas1[:ncases:ncases]                       // case 数组
+    pollorder := order1[:ncases:ncases]                  // 遍历顺序
+    lockorder := order1[ncases:][:ncases:ncases]         // 加锁顺序
     
     norder := 0                                          
-	for i := range scases {                 // 生成随机排列顺序
-		cas := &scases[i]
-		j := fastrandn(uint32(norder + 1))  // 居然是蓄水池抽样
-		pollorder[norder] = pollorder[j]    // 以 1/i+1 的概率对调 j 和 i+1
-		pollorder[j] = uint16(i)
-		norder++
-	}
+    for i := range scases {                 // 这个循环用于生成随机排列顺序，后续按这个顺序遍历
+        cas := &scases[i]
+        j := fastrandn(uint32(norder + 1))  // 居然是蓄水池抽样
+        pollorder[norder] = pollorder[j]    // 以 1/i+1 的概率对调 j 和 i+1
+        pollorder[j] = uint16(i)
+        norder++
+    }
     
     // 阶段1： 随机顺序遍历
     for _, casei := range pollorder { 
-		casi = int(casei)              // 大无语命名
-		cas = &scases[casi]
-		c = cas.c
+        casi = int(casei)              // 大无语命名
+        cas = &scases[casi]
+        c = cas.c
 
-		if casi >= nsends {
-			sg = c.sendq.dequeue()   // 从等待队列里取 sudog
-			if sg != nil {           // 取到了，就执行同步读
-				goto recv
-			}
-			if c.qcount > 0 {        // 否则判断 buffer
-				goto bufrecv         // 有 buffer 则读 buffer
-			}
-			if c.closed != 0 {
-				goto rclose
-			}
-		} else {                     // 和上面差不多
-			...
-		}
-	}
+        // 这里会根据不同情况通过 goto 语句跳转到函数内部的不同标签执行相应的逻辑
+        if casi >= nsends {
+            sg = c.sendq.dequeue()   // 从等待队列里取 sudog
+            if sg != nil {           // 取到了，就执行同步读
+                goto recv
+            }
+            if c.qcount > 0 {        // 否则判断 buffer
+                goto bufrecv         // 有 buffer 则读 buffer
+            }
+            if c.closed != 0 {
+                goto rclose
+            }
+        } else {                     // 和上面差不多
+            ...
+        }
+    }
 
-	if !block {                      // select 里有 default 时，block = false，执行这里
-		selunlock(scases, lockorder) // 解锁
-		casi = -1                    // 返回值为 -1
-		goto retc                    // 返回
-	}
+    if !block {                      // select 里有 default 时，block = false，说明为非阻塞，执行这里
+        selunlock(scases, lockorder) // 解锁
+        casi = -1                    // 返回值为 -1
+        goto retc                    // 返回
+    }
 
-	// 阶段2：所有 case 都阻塞住了，且没有 default
+    // 阶段2：所有 case 都阻塞住了，且没有 default
     // 将 select 挂到所有 case 的等待列表里，等待被唤醒
-	gp = getg()
-	nextp = &gp.waiting
-	for _, casei := range lockorder { 
-		casi = int(casei)
-		cas = &scases[casi]
-		c = cas.c
-		sg := acquireSudog()    // 新建 sudog
-		sg.g = gp
-		sg.isSelect = true
-		sg.elem = cas.elem
-		sg.c = c
-		if casi < nsends {
-			c.sendq.enqueue(sg) // 挂到写等待队列
-		} else {
-			c.recvq.enqueue(sg) // 挂到读等待队列
-		}
-	}
+    gp = getg()
+    nextp = &gp.waiting
+    for _, casei := range lockorder { 
+        casi = int(casei)
+        cas = &scases[casi]
+        c = cas.c
+        sg := acquireSudog()    // 新建 sudog
+        sg.g = gp
+        sg.isSelect = true
+        sg.elem = cas.elem
+        sg.c = c
+        if casi < nsends {
+            c.sendq.enqueue(sg) // 挂到写等待队列
+        } else {
+            c.recvq.enqueue(sg) // 挂到读等待队列
+        }
+    }
 }
 ```
-
-
 
 
 
