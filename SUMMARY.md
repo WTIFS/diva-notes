@@ -39,7 +39,7 @@ Table of contents:
   * [Go调度-线程](Go/Go调度-线程.md)
   * [Go调度-译文](Go/Go调度-译文.md)
   * [Timer的实现](Go/Timer的实现.md)
-  * [defer的实现](Go/defer的实现.md)
+  * [defer的实现](Go/4常用关键字/defer的实现.md)
   * [http.Client](Go/http.Client.md)
   * [interface](Go/interface.md)
   * [map的实现](Go/map的实现.md)
