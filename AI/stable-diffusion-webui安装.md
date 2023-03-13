@@ -253,6 +253,5 @@ Lora角色滤镜扩展教程：https://sparkly-day-9db.notion.site/AI-1962de6fa0
 
 - 动漫风格 Anything V3: https://civitai.com/models/66/anything-v3
 - 真人风格 ChilloutMix: https://civitai.com/models/6424/chilloutmix
-- korean Doll Likeness(Lora): https://civitai.com/models/7448/korean-doll-likeness
-- Taiwan Doll Likeness(Lora): https://civitai.com/models/7716/taiwan-doll-likeness
+- korean Doll Likeness(Lora): https://huggingface.co/dadadadadatou/KbrDollLikeness/tree/main
 - St. Louis (Luxurious Wheels) (Azur Lane) (Lora): https://civitai.com/models/6669/st-louis-luxurious-wheels-azur-lane
