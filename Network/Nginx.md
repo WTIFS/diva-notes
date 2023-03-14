@@ -18,6 +18,16 @@ worker 进程的作用：
 
 worker 进程启动后，循环检查 `epoll_wait` 处理对应的 handle 事件。
 
+
+
+##### 热重启
+
+通过 `nginx -s reload` 命令可以热重启 nginx 进程，其原理为：通过 master/worker 这种模型，master 可以在接收到重载命令后使用新配置新建 worker 子进程，新的连接都有新进程来处理；老 worker 处理完旧连接后关闭，就完成了热重启。
+
+
+
+##### 惊群
+
 多个 worker 会将从 master 进程继承的 listen 状态的 fd 加入到 `epoll` 中。如果一个 `fd` 被同时加入到多个 `worker` 进程中，会出现多个 `worker` 被唤醒处理同一个 `fd` 的情况，即惊群现象（内核2.6版本之前），会导致不可预估的错误；同时唤醒多个 worker 处理将导致性能下降。为了防止同一个 `fd` 被同时加入到多个 worker 进程中，nginx 使用了互斥锁，获取到互斥锁的进程将 `fd` 加入到自身进程的 `epoll` 中。
 
 
