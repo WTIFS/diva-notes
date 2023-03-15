@@ -38,45 +38,45 @@ next:   0 0 0 1 2 0
 // B:      b c b c d
 // next:   0 0 0 1 2 0
 func buildNext(s string) []int {
-	next := make([]int, len(s)+1)
-	j := 0
-	for i := 1; i < len(s); i++ {
-		for s[i] != s[j] && j != next[j] {
-			j = next[j]
-		}
-		if s[i] == s[j] {
-			j++
-			next[i+1] = j
-		}
-	}
-	return next
+    next := make([]int, len(s)+1)
+    j := 0
+    for i := 1; i < len(s); i++ {
+        for s[i] != s[j] && j != next[j] {
+            j = next[j]
+        }
+        if s[i] == s[j] {
+            j++
+            next[i+1] = j
+        }
+    }
+    return next
 }
 
 // 判端 needle 在 heystack 中出现的下标
 func strStr(haystack string, needle string) int {
-	i, j := 0, 0
-	m, n := len(haystack), len(needle)
-	if n == 0 {
-		return 0
-	}
+    i, j := 0, 0
+    m, n := len(haystack), len(needle)
+    if n == 0 {
+        return 0
+    }
 
-	next := buildNext(needle)
-	for i < m && j < n {
-		if haystack[i] == needle[j] {
-			i++
-			j++
-		} else {
-			if j > 0 {
-				j = next[j]
-			} else {
-				i++
-			}
-		}
-		if j == n {
-			return i - j
-		}
-	}
-	return -1
+    next := buildNext(needle)
+    for i < m && j < n {
+        if haystack[i] == needle[j] {
+            i++
+            j++
+        } else {
+            if j > 0 {
+                j = next[j]
+            } else {
+                i++
+            }
+        }
+        if j == n {
+            return i - j
+        }
+    }
+    return -1
 }
 ```
 

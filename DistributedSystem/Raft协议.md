@@ -117,8 +117,7 @@ log entry := (term_number, command)
 
 ## Client交互
 
-1. `Client` 只向领导者发送请求；
-2. `Client` 开始会向追随者发送请求，追随者拒绝 `Client` 的请求，并重定向到领导者；
+1. `Client` 只向 leader 发送请求；如果向非 leader 发送请求，会被拒绝并重定向到 leader 节点
 3. `Client` 请求失败，会超时重新发送请求；
 
 `Raft` 算法要求 `Client` 的请求线性化，防止请求被多次执行。有两个解决方案：

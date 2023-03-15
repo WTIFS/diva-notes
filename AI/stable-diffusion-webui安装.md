@@ -142,6 +142,7 @@ Lora模型放到 `models/Lora` 文件夹下
 生成相同构图、动作：https://github.com/Mikubill/sd-webui-controlnet
 
 - 这个也需要下载模型，安装指引：https://www.bilibili.com/read/cv21829826?spm_id_from=333.999.0.0
+- 模型下载地址：https://huggingface.co/lllyasviel/ControlNet/tree/main/models
 
 Lora模型插件（现在 WebUI 已经内置 Lora功能了，一般不用）：https://github.com/kohya-ss/sd-webui-additional-networks
 
