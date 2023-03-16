@@ -1,4 +1,4 @@
-`kafka` 的 `ISR`（In-Sync Replicas）机制被称为"不丢消息"机制。在说 `ISR` 机制前，先讲一下 `kafka` 的副本（replica）。
+`kafka` 的 `ISR`（In-Sync Replicas）机制被称为"不丢消息"机制。表示和 `leader` 保持同步的 `follower` 列表
 
 
 
@@ -37,11 +37,11 @@
 
 #### acks参数
 
-- `acks=0`，`producer` 不等待 `broker` 的响应，消息会被立即写入缓冲区并视为发送成功。效率最高，但是消息可能会丢。
+- `acks=0`，表示不需要回复，`producer` 不等待 `broker` 的响应，消息会被立即写入缓冲区并视为发送成功。效率最高，但是消息可能会丢。
 
-- `acks=1`，`producer` 会等待 `leader broker` 收到消息、写入缓冲区、落盘后，才视为发送成功。
+- `acks=1`，需要一个回复，`producer` 会等待 `leader broker` 收到消息、写入缓冲区、落盘后，才视为发送成功。
 
-- `acks=all/-1`，`leader broker` 收到消息后，挂起，等待所有 `ISR` 列表中的 `follower` 返回结果后，再返回 `ack`。
+- `acks=all/-1`，需要所有节点恢复，`leader broker` 收到消息后，挂起，等待 `ISR` 列表中所有 `follower` 返回结果后，才返回。
 
 
 
