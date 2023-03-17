@@ -1,6 +1,6 @@
 在基于 TCP 的服务开发中，三次握手的主要流程如下：
 
-客户端：发送 SYN包
+客户端：发送 SYN 包
 
 服务端：回复 ACK
 
@@ -373,7 +373,7 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err)
 
 1. 服务器 listen，计算全/半连接队列的长度，申请相关内存并初始化。
 2. 客户端 connect 时，把本地 socket 状态设置成了 TCP_SYN_SENT，选择一个可用的端口，发出 SYN 握手请求并启动重传定时器。
-3. 服务器响应 ack 时，会判断下接收队列是否满了，满的话可能会丢弃该请求。否则发出 synack，申请 request_sock 添加到半连接队列中，同时启动定时器。
+3. 服务器响应 ack 时，会判断下接收队列是否满了，满的话可能会丢弃该请求。否则发出 synack，申请将 request_sock 添加到半连接队列中，同时启动定时器。
 4. 客户端响应 synack 时，清除了 connect 时设置的重传定时器，把当前 socket 状态设置为 ESTABLISHED，开启保活计时器后发出第三次握手的 ack 确认。
 5. 服务器响应 ack 时，把对应半连接对象删除，创建了新的 sock 后加入到全连接队列中，最后将新连接状态设置为 ESTABLISHED。
 6. accept 从已经建立好的全连接队列中取出一个返回给用户进程。
