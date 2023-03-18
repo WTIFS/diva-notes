@@ -28,7 +28,7 @@ worker 进程启动后，循环检查 `epoll_wait` 处理对应的 handle 事件
 
 ##### 惊群
 
-多个 worker 会将从 master 进程继承的 listen 状态的 fd 加入到 `epoll` 中。如果一个 `fd` 被同时加入到多个 `worker` 进程中，会出现多个 `worker` 被唤醒处理同一个 `fd` 的情况，即惊群现象（内核2.6版本之前），会导致不可预估的错误；同时唤醒多个 worker 处理将导致性能下降。为了防止同一个 `fd` 被同时加入到多个 worker 进程中，nginx 使用了互斥锁，获取到互斥锁的进程将 `fd` 加入到自身进程的 `epoll` 中。
+多个 worker 会将从 master 进程继承的 listen 状态的 fd 加入到 `epoll` 中。如果一个 `fd` 被同时加入到多个 `worker` 进程中，会出现多个 `worker` 被唤醒处理同一个 `fd` 的情况，即惊群现象（Linux 2.6版本之前），会导致不可预估的错误；同时唤醒多个 worker 处理将导致性能下降。为了防止同一个 `fd` 被同时加入到多个 worker 进程中，nginx 使用了互斥锁，获取到互斥锁的进程将 `fd` 加入到自身进程的 `epoll` 中。
 
 
 
