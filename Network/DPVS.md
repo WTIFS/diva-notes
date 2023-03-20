@@ -1,6 +1,6 @@
 ## DPVS简介
 
-**[DPVS](https://github.com/iqiyi/dpvs)** 是一个基于 [DPDK](https://www.dpdk.org/) 的高性能四层负载均衡器（Layer-4 load balancer），由爱奇艺开发。Linux下文件是如何实现树形结构的？DPVS的名字来源于 DPDK + LVS，注意这里的LVS是 [阿里巴巴改进版的LVS](https://github.com/alibaba/LVS)。主要特点有：
+**[DPVS](https://github.com/iqiyi/dpvs)** 是一个基于 [DPDK](https://www.dpdk.org/) 的高性能四层负载均衡器（Layer-4 load balancer），由爱奇艺开发。DPVS的名字来源于 DPDK + LVS，注意这里的LVS是 [阿里巴巴改进版的LVS](https://github.com/alibaba/LVS)。主要特点有：
 
 1. 用户态实现
 2. Master / Worker 模型
