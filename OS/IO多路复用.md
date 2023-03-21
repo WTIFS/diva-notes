@@ -75,13 +75,15 @@ int n = read(connfd, buffer) != SUCCESS);  // read函数
 
 # IO 多路复用
 
-为每个客户端创建一个线程，服务器端的线程资源很容易被耗光。有个聪明的办法，我们可以每 `accept` 一个客户端连接后，将这个文件描述符 `connfd` 放到一个数组/队列里。
+先解释一下多路复用这个词的概念：上面讨论的都是一个连接的情况。想要并发处理多个连接，最简单的方式就是为每一个连接启动一个线程处理，（ `apache` 就是这样做的），但这样很浪费性能，因为每个连接只有一段时间在工作，其他时间是空闲的。因此有一个更聪明的方案：只起 1 个线程处理连接。处理时使用上面提到的非阻塞IO，这样连接有数据时线程去处理，没数据时线程便切换至下一个连接。这种使用一个线程处理多个连接，也即多个连接共用一个线程的做法，就叫多路复用。
+
+这样的设计首先需要一个队列保存连接：
 
 ```c
 fdlist.add(connfd); // 将连接放入队列
 ```
 
-然后起一个新的线程去不断遍历这个数组，调用每一个元素的非阻塞 `read` 方法。
+然后起一个的线程去不断遍历这个数组，使用非阻塞 `read` 方法判断该连接上是否有数据到达。
 
 ```c
 while(1) {
@@ -93,19 +95,15 @@ while(1) {
 }
 ```
 
-这样我们只需要2个线程（一个把连接放入队列，一个从队列里取连接出来处理），就可以处理多个客户端连接。
+基于这种设计，Linux 下提供了 3 种多路复用函数：`select, poll, epoll`
 
-你是不是觉得这有些多路复用的意思？
 
-但这和我们用多线程去将阻塞 IO 改造成看起来是非阻塞 IO 一样，这种遍历方式也只是我们用户自己想出的小把戏，每次遍历遇到 `read` 返回 -1 时仍然是一次浪费资源的系统调用。
-
-所以，还是得恳请操作系统老大，提供给我们一个有这样效果的函数，我们将一批文件描述符通过一次系统调用传给内核，由内核层去遍历，才能真正解决这个问题。
 
 
 
 ## **select**
 
-`select` 是操作系统提供的系统调用函数，通过它，我们可以不用为每个 `fd` 调用一次 `read` 了，而是一次传一批 `fd`， 让操作系统去遍历，确定哪个文件描述符可以读写， 然后告诉我们去处理。
+`select`：Linux 下多路复用最简单的实现。通过它，我们可以不用为每个 `fd` 调用一次 `read` 了，而是一次传一批 `fd`， 让操作系统去遍历，确定哪个文件描述符可以读写， 然后告诉我们去处理。
 
 <img src="assets/643.gif" alt="643" style="zoom:67%;" />
 
@@ -117,10 +115,7 @@ int select(
     fd_set *readfds,          // 监控有读数据到达文件描述符集合，传入传出参数
     fd_set *writefds,         // 监控写数据到达文件描述符集合，传入传出参数
     fd_set *exceptfds,        // 监控异常发生达文件描述符集合, 传入传出参数
-    struct timeval *timeout); // timeout：定时阻塞监控时间，3种情况
-//  1.NULL，永远等下去
-//  2.设置timeval，等待固定时间
-//  3.设置timeval里时间均为0，检查描述字后立即返回，轮询
+    struct timeval *timeout); // timeout：定时阻塞监控时间，3种情况：NULL=阻塞等待；0=非阻塞立即返回；其他x=等待x时间
 ```
 
 
@@ -129,13 +124,13 @@ int select(
 
 `fd_set` 是一个默认总大小为 `__FD_SETSIZE = 1024` 的 bitmap ( `[32]int64`)，每位可标记一个 `fd`
 
-`select` 内部会遍历前 `nfds` 个 `fd`，对每个 ` fd` 判断是否就绪，如果就绪，则修改相应 `fd_set` 上对应的位为 1
+`select` 内部会遍历前 `nfds` 个 `fd`，对每个 ` fd` 判断是否就绪，如果就绪，则修改相应 `fd_set` 上对应的位为 1。调用者再检查 `fd_set`
 
 
 
 ### select 的实现
 
-设程序同时监视 `sock1, sock2, sock3` 三个 `socket`。
+设程序 A 同时监视 `sock1, sock2, sock3` 三个 `socket`。
 
 在调用 `select` 之后，操作系统把进程A分别加入这三个 `socket` 的等待队列中。
 
@@ -157,7 +152,7 @@ while(1) {
 }
 ```
 
-然后，另一个线程不再自己遍历，而是调用 `select`，将这个 `list` 交给操作系统去遍历。
+然后，另一个线程调用 `select`，将这个 `list` 交给操作系统去遍历。
 
 ```c
 while(1) {
@@ -211,7 +206,7 @@ while(1) {
 
 ## poll
 
-`poll` 的实现和 `select` 非常相似，只是描述 `fd` 集合的方式不同，`select` 使用了数组作为 `fd_set`，设置了最大大小为 1024个。`poll` 改用了一个链表  `pollfd` ，因此没有这个限制。和 `select` 相比只是实现细节上的区分，并没有本质上的区别。
+`poll` 的实现和 `select` 非常相似，只是描述 `fd` 集合的方式不同，`select` 使用了 `bitmap` 作为 `fd_set`，设置了最大大小为 1024个。`poll` 改用了一个链表  `pollfd` ，因此没有这个限制。和 `select` 相比只是实现细节上的区分，并没有本质上的区别。
 
 ```c
 int poll(struct pollfd *fds, nfds_tnfds, int timeout);
@@ -246,10 +241,10 @@ struct pollfd {
 // 创建epoll内核对象，内含红黑树结构用于管理fd
 int epoll_create(int size) 
 
-// 向epoll对象中添加 fd
+// 向epoll红黑树中添加 fd
 int epoll_ctl(int epfd, int op, int fd, struct epoll_event *event);
 
-// 将就绪的fd放入events数组，并返回就绪fd数量
+// 返回就绪的fd（参数events字段存储结果就绪的fd，返回就绪fd数量）
 int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout);
 ```
 
@@ -260,22 +255,22 @@ int epoll_wait(int epfd, struct epoll_event *events, int max events, int timeout
 ```c
 int epfd = epoll_create(10); // 创建一个 epoll 对象
 
-for(i = 0; i < 5; i++)
-      {
-          static struct epoll_event ev;
-          ev.data.fd = accept(sock_fd, (struct sockaddr *)&client_addr, &sin_size);  
-          ev.events = EPOLLIN;
-          epoll_ctl(epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);  // 向 epoll 对象中添加要管理的连接 
-      }
+for (i = 0; i < 5; i++)
+{
+    static struct epoll_event ev;
+    ev.data.fd = accept(sock_fd, (struct sockaddr *)&client_addr, &sin_size);  
+    ev.events = EPOLLIN;
+    epoll_ctl(epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);  // 向 epoll 对象中添加要管理的连接 
+}
 
 struct epoll_event events[5];
 while(1)               
-{
-        nfds = epoll_wait(epfd, events, 5, 10000);   // 等待连接
-        for (i=0; i<nfds; i++)
-        {
-            read(events[i].data.fd, buff, MAXBUF)
-        }
+{ 
+    nfds = epoll_wait(epfd, events, 5, 10000);   // 等待连接
+    for (i=0; i<nfds; i++)
+    {
+        read(events[i].data.fd, buff, MAXBUF)
+    }
 }
 ```
 
@@ -286,7 +281,7 @@ while(1)
 ```c
 struct eventpoll {
     wait_queue_head_t wq;      // 等待队列链表，存放阻塞的进程。数据就绪后会回这里找之前阻塞的进程，恢复执行
-    struct rb_root rbr;        // 红黑树，管理用户进程下添加进来的所有 socket 连接
+    struct rb_root rbr;        // 红黑树，管理用户进程下添加进来的所有 socket 连接。epoll_ctl() 向树中添加fd
     struct list_head rdllist;  // 数据就绪的文件描述符链表。这样应用进程只需要读该链表，而不需要读整棵树。
 }
 ```
@@ -299,9 +294,9 @@ struct eventpoll {
 
 `epoll` 利用 `epoll_ctl` 来插入或者删除一个 `fd`，实现用户态到内核态的数据拷贝，这确保了每一个 `fd` 在其生命周期只需要被拷贝一次，而不是每次调用 `epoll_wait` 的时候都拷贝一次。相比 `select & poll` 需要把全部监听的 `fd` 集合从用户态拷贝至内核态的做法，效率高出了一大截。
 
-当把 `fd` 添加进来的时候时候会完成关键的一步：该 `fd` 会与相应的设备（网卡）驱动程序建立回调关系，也就是在内核中断处理程序为它注册一个回调函数，在 `fd` 相应的事件触发（中断）之后（设备就绪了），内核就会调用这个回调函数，该回调函数在内核中被称为： `ep_poll_callback` 。这个回调函数其实就是把这个 `fd` 添加到一个双向链表（就绪链表） `rdllist` 中。
+当把 `fd` 添加进来的时候时候会完成关键的一步：该 `fd` 会与相应的设备（网卡）驱动程序建立回调关系，也就是在内核中断处理程序为它注册一个回调函数，当 `fd` 的 `socket` 有数据到达后，会触发中断，内核处理中断时就会调用这个回调函数。这个回调函数的内容就是把这个 `fd` 添加到一个就绪链表 `rdllist` 中。
 
-`epoll_wait` 实际上就是去检查 `rdllist` 链表是否为空，不空说明有就绪的 `fd`，从 `wq` 里找到并唤醒之前阻塞的用户进程，把 `rdllist` 中就绪的 `fd` 返回给该进程，让进程调用 `recv` 把已经到达内核 socket 等待队列的数据拷贝到用户空间使用。
+`epoll_wait` 实际上就是去检查 `rdllist` 链表是否为空，不空说明有就绪的 `fd`，从 `wq` 里找到并唤醒之前阻塞的用户进程，把 `rdllist` 中就绪的 `fd` 返回给该进程，让进程调用 `recv` 把该 `fd` 的 `socket` 里的数据拷贝到用户空间使用。
 
 
 
@@ -309,25 +304,76 @@ struct eventpoll {
 
 `epoll` 支持两种事件触发模式，分别是**边缘触发（edge-triggered，ET）和水平触发（level-triggered，LT）**。
 
-#### 边缘触发
+二者的主要区别在于什么时候通知应用程序进行读写操作。边缘触发模式只在状态变化时通知一次，而水平触发模式会在处于就绪状态时不断通知。
 
-使用边缘触发模式时，当被监控的 `socket` 描述符上有可读事件发生时，**服务器端只会从 epoll_wait 中苏醒一次**，即使进程没有调用 `read` 函数从内核读取数据，也依然只苏醒一次，因此我们程序要保证一次性将内核缓冲区的数据读取完
+
+
+#### 边缘触发 Edge-triggered(ET)
+
+使用边缘触发模式时，如果被监控的 `fd socket` 上有数据到达，根据上面介绍的流程，该 `fd` 会被放入 `rdllist`。如果此时我们调用 `epoll_wait()` 获取该就绪队列，那么该队列会被清空，下次再调用 `epoll_wait()` 就不会再返回该 `fd` 了。
+
+也就是说，进程只会从 `epoll_wait()` 中苏醒一次，即使进程没有调用 `read()` 函数从内核读取数据，也依然只苏醒一次，因此我们程序要保证一次性将内核缓冲区的数据读取完
 
 举个例子，你的快递被放到了一个快递箱里，如果快递箱只会通过短信通知你一次，即使你一直没有去取，它也不会再发送第二条短信提醒你。
 
 如果使用边缘触发模式，I/O 事件发生时只会通知一次，而且我们不知道到底能读写多少数据
 
-因此，我们会**循环**从文件描述符读写数据，那么如果文件描述符是阻塞的，没有数据可读写时，进程会阻塞在读写函数那里，程序就没办法继续往下执行。所以，边缘触发模式一般和非阻塞 I/O 搭配使用，程序会一直执行 I/O 操作，直到系统调用（如 `read` 和 `write`）返回错误，错误类型为 `EAGAIN` 或 `EWOULDBLOCK`。
+因此，我们需要循环从文件描述符读写数据。那么如果文件描述符是阻塞的，没有数据可读写时，进程会阻塞在读写函数那里，程序就没办法继续往下执行。所以，边缘触发模式一般和非阻塞 I/O 搭配使用，程序会一直执行 I/O 操作，直到系统调用（如 `read` 和 `write`）返回错误，错误类型为 `EAGAIN` 或 `EWOULDBLOCK`。
 
 一般来说，边缘触发的效率比水平触发的效率要高，因为边缘触发可以减少 `epoll_wait` 的系统调用次数，系统调用也是有一定的开销的的。
 
+使用时是类似这样的：
+
+```c
+ev.events = EPOLLIN | EPOLLET;                         // 设置边缘模式 ET
+epoll_ctl(epfd, EPOLL_CTL_ADD, ev.data.fd, &ev);
+
+while(1)               
+{
+    nfds = epoll_wait(epfd, events, 5, 10000);         // 一个有数据的 fd 在这里返回一次后，下次就不再会返回了
+    for (i=0; i<nfds; i++)
+    {
+        for {                                          // 这里必须一次性读完，所以用循环一直读，直到没有数据可读
+            n = read(events[i].data.fd, buff, MAXBUF)  // 且这里的 read 必须是非阻塞 read，否则就会卡在这里阻塞别的进程
+            if n < 0 {
+                break    
+            }
+        }
+    }
+}
+```
 
 
-#### 水平触发
 
-使用水平触发模式时，当被监控的 Socket 上有可读事件发生时，**服务器端不断地从 epoll_wait 中苏醒，直到内核缓冲区数据被 read 函数读完才结束**，目的是告诉我们有数据需要读取
+`Go` 里的 `netpoll` 用的就是边缘触发模式：
+
+```go
+// runtime/netpoll_epoll.go
+func netpollopen(fd uintptr, pd *pollDesc) int32 {
+    ev.events = _EPOLLIN | _EPOLLOUT | _EPOLLRDHUP | _EPOLLET // EPOLLET -> Edge Triggered 边缘触发模式
+    return -epollctl(epfd, _EPOLL_CTL_ADD, int32(fd), &ev)    // 实际调用 linux epoll_ctl()
+}
+```
+
+
+
+
+
+#### 水平触发 Level-triggered (LT)
+
+水平触发是默认的模式。
+
+使用水平触发模式时，只要被监控的 `fd socket` 缓冲区中有数据，`epoll_wait()` 就会返回这个 `fd`，直到 `socket` 缓冲区中没有数据了，它才会在下一次调用 `epoll_wait()` 时被从 `rdlist` 中移除
 
 仍然用上面快递的例子，如果快递箱发现你的快递没有被取出，它就会不停地发短信通知你，直到你取出了快递，它才消停
+
+
+
+#### 如何选择？
+
+`Nginx`、`Go` 的 `netpoll` 里是用的都是边缘模式，这种模式触发次数少，效率更高
+
+`Redis` 采用的是水平模式，因为边缘模式下，如果读取或写入操作没有读写完全，内核将不会再次通知该文件描述符上的可读/可写事件，这样可能导致事件丢失。对于 Redis 这种数据库，数据一致性要求较高的场景来说，水平模式更合适一些。
 
 
 
@@ -351,8 +397,8 @@ struct eventpoll {
 
 # 总结
 
-1. 如果不使用内核提供的 IO多路复用，我们需要遍历每个连接 `fd`，调用内核的 `read` 方法判断 `fd` 的就绪状态。对于那些未就绪的 `fd`，每次 `read` 都是无效且耗费资源的操作
-2. 通过 `select` 方法，我们可以将一批 `fd` 交给内核，内核来进行遍历。内核会给就绪的 `fd` 打上标记，我们再遍历一次 `fd`列表，处理其中就绪的 `fd` 就可以了。相比1来说，省去了每次循环里用户态切到内核态再调用 `read` 的开销
+1. 如果不使用内核提供的 IO多路复用，我们需要为每个连接起一个进程来处理，进程内不断调用内核的 `read` 方法轮询，判断 `fd` 的就绪状态。对于那些未就绪的 `fd`，每次 `read` 都是无效且耗费资源的操作
+2. 通过 `select` 方法，我们可以将一批 `fd` 交给内核，内核来进行遍历。内核会给就绪的 `fd` 打上标记，我们再遍历一次 `fd`列表，处理其中就绪的 `fd` 就可以了。相比1来说，复用一个进程处理连接而不是多个进程；且省去了每次循环里用户态切到内核态再调用 `read` 的开销
 3. `poll` 方法去掉了 `select` 只能监听 1024 个 `fd` 的限制
 4. `epoll`  方法对 `select` 的一些缺点进行了优化，如：
    1. 用户调用时不再需要复制一份 `fd` 列表给内核，而是通过 `epoll_ctl` 方法直接向内核中写入 `fd`
@@ -367,7 +413,8 @@ struct eventpoll {
 
 IO多路复用，复用的是什么？目的是什么？
 
-- 复用的是进程。相比单进程单连接的处理方法，IO多路复用使用2个线程即可处理多个连接（一个把连接放入队列，一个从队列中取出处理）。目的是1减少进程数量，2减少阻塞次数，3减少无用遍历和复制，提高程序效率
+- 复用的是进程资源。这样可以避免每个IO操作都创建一个新进程，减小进程的创建和销毁开销，提高系统的效率和性能。
+- Nginx 的 worker 复用一个进程来处理多个IO事件，Go 的 netpoller 复用一个协程处理所有的网络连接。
 
 UNIX、MacOS 下没有 `epoll`，取而代之的是 `kqueue`，实现和 `epoll` 类似
 
