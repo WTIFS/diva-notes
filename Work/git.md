@@ -1,6 +1,9 @@
 ```bash
 git config --global user.name
 git config --global user.email
+
+git config --global --get user.name
+git config --global --get user.email
 ```
 
 
@@ -33,4 +36,6 @@ git config --global user.email
     email = b
     name = b
 ```
+
+
 
