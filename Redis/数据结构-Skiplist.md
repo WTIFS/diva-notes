@@ -28,6 +28,16 @@
 
 
 
+### 跳表 VS B+树
+
+1. 跳表写数据时只需生成随机层数，没有旋转和维持树平衡的开销，因此写入性能优于B+树
+2. 同样量级的数据，B+树层高比跳表矮，因此查询比B+树快
+    1. facebook 的 rocksDB 用了B+树，就是写性能贼强，读性能差点
+3. Redis 的数据都存在内存，不需要像 MySQL 一样按页从磁盘加载数据到内存，因此层高不再是跳表的劣势
+
+
+
+
 
 
 ## 实现
@@ -71,9 +81,9 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     
     level = zslRandomLevel(); // 随机生成本次插入的层数，每多一层，概率*0.25
     
-    x = zslCreateNode(level,score,ele);
+    x = zslCreateNode(level,score,ele);                   // 新建层数=level 的 entry 节点
     for (i = 0; i < level; i++) {
-        x->level[i].forward = update[i]->level[i].forward; // 将 x.next 指向原下一个节点
+        x->level[i].forward = update[i]->level[i].forward; // 将 x.forward 指向原下一个节点
         update[i]->level[i].forward = x;  
     }
 }
