@@ -97,6 +97,15 @@ int zslRandomLevel(void) {
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
+
+// new 一个跳表 node 结构
+zskiplistNode *zslCreateNode(int level, double score, sds ele) {
+    zskiplistNode *zn =
+        zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+    zn->score = score;
+    zn->ele = ele;
+    return zn;
+}
 ```
 
 
