@@ -45,7 +45,7 @@
 
 
 
-这种做法和 `Go` 的 `http` 库异曲同工。`netpoll` 里只用一个协程处理网络连接，但对连接里请求的读写，仍然是每个连接起两个协程分别负责其读写：
+这种做法叫做 **Reactor** 模型，`Nginx` 的 `master-worker` 模型、`Node.js` 的事件处理、 `Golang` 的 `http` 库都可以视为使用了这种模型。以 `netpoll` 为例，里面只用一个协程分发网络连接，将连接里请求的读和写分发给两个协程：
 
 ```go
 go pconn.readLoop()
