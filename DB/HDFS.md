@@ -1,6 +1,4 @@
-HDFS，是Hadoop Distributed File System的简称，它是Hadoop的一个子项目，也是Hadoop抽象文件系统的一种实现。HDFS的文件分布在集群机器上，同时提供副本进行容错及可靠性保证。例如客户端写入读取文件的直接操作都是分布在集群各个机器上的，没有单点性能压力。
-
-
+HDFS，是 Hadoop Distributed File System 的简称，它是Hadoop的一个子项目，也是Hadoop抽象文件系统的一种实现。HDFS的文件分布在集群机器上，同时提供副本进行容错及可靠性保证。例如客户端写入读取文件的直接操作都是分布在集群各个机器上的，没有单点性能压力。
 
 
 

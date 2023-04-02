@@ -41,7 +41,7 @@
 
 - `acks=1`，需要一个回复，`producer` 会等待 `leader broker` 收到消息、写入缓冲区、落盘后，才视为发送成功。
 
-- `acks=all/-1`，需要所有节点恢复，`leader broker` 收到消息后，挂起，等待 `ISR` 列表中所有 `follower` 返回结果后，才返回。
+- `acks=all/-1`，需要所有节点回复，`leader broker` 收到消息后，挂起，等待 `ISR` 列表中所有 `follower` 返回结果后，才返回。
 
 
 
