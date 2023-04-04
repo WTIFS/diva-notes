@@ -2,9 +2,9 @@
 
 不储存元素的原始值，而是存其指纹信息 `fingerprint`（`8` 位的 `bit`）。
 
-将元素转为 `hash`。每个元素计算 `2` 个 `hash` 作为下标。一个主位置，一个备选位置。并且主备位置可以互相算出来。
+将元素转为 `hash`。每个元素计算 `2` 个 `hash` 作为下标。一个主位置，一个备选位置。并且利用异或，主备位置可以互相算出来。
 
-插入元素时，如果主位置已经被占了（发生冲突），则将占用的元素 `A` 踢到 `A` 的备选位置上，如果 `A` 的备选位置上还有元素 `B`，再把 `B` 踢到 `B` 备选位置上，依次进行直到成功或到达次数上线。
+插入元素时，如果主位置已经被占了（发生冲突），则将占用的元素 `A` 踢到 `A` 的备选位置上，如果 `A` 的备选位置上还有元素 `B`，再把 `B` 踢到 `B` 的另一个位置上（备选位置或主位置），依次进行直到成功或到达次数上线。
 
 如果到达次数上限，则说明该扩容了。
 
@@ -19,14 +19,19 @@
 查找元素时，分别查找主位置和备选位置上是否有相应的指纹。
 
 ```c
+// https://github.com/RedisBloom/RedisBloom/blob/bdc753e983aa1e23fea733d75b4e4e54848093c1/src/cuckoo.c
 static void getLookupParams(CuckooHash hash, LookupParams *params) {
     params->fp = hash % 255 + 1;                     // 指纹
     params->h1 = hash;                               // 主位置
     params->h2 = getAltHash(params->fp, params->h1); // 备选位置
 }
+
+static CuckooHash getAltHash(CuckooFingerprint fp, CuckooHash index) {
+    return ((CuckooHash)(index ^ ((CuckooHash)fp * 0x5bd1e995)));
+}
 ```
 
-
+（这感觉有问题啊？指纹居然是根据 hash 值取余算出的。如果两个不同的 key hash 冲突，那么算出下标和指纹都一样，就没法区分了。算指纹应该用一个单独的 hash 函数吧
 
 
 

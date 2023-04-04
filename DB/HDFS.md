@@ -5,7 +5,7 @@ HDFS，是 Hadoop Distributed File System 的简称，它是Hadoop的一个子�
 ###  架构设计
 #### 服务端
 
-- HDFS的架构设计基于主从复制模式，其中包括一个主节点（NameNode）和多个从节点（DataNode）
+- HDFS的架构为：一个主管理节点（NameNode）+ 多个数据节点 DataNode
 
 - NameNode 负责管理文件系统的命名空间、维护文件系统的元数据信息，也负责确定数据块到具体 Datanode 节点的映射
 - DataNode 负责存储实际的数据块，并响应客户端的请求。数据块可以被复制到多个DataNode上，以保证数据的可靠性和高可用性。
@@ -30,7 +30,7 @@ HDFS，是 Hadoop Distributed File System 的简称，它是Hadoop的一个子�
 
 
 ###  数据一致性
-为了确保数据的一致性，HDFS采用了主从复制模式。当客户端请求向HDFS写入数据时，先将数据分成多个块，然后将这些块分配到不同的DataNode上进行存储。同时，NameNode会记录每个块存储的位置信息，并将其存储在内存中，以便快速访问。当块的副本发生变化时，NameNode会通知DataNode进行复制或删除。在写入操作完成后，NameNode会将文件的元数据信息存储到磁盘中，以保证数据的一致性。
+HDFS会将一个块的数据写入多个 DataNode。同时，NameNode会记录每个块存储的位置信息。NameNode 中记录的一定是写成功的块的信息，写入失败的不会记录，保证查询时一定能在有数据的节点上查找。
 
 
 
