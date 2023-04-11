@@ -36,7 +36,7 @@
 
 
 
-#### go中怎么控制协程的顺序
+#### Go中怎么控制协程的顺序
 
 信号量 / 锁 / 队列（channel)
 
@@ -56,4 +56,22 @@
 #### 除了 pprof，还有哪些性能分析工具？
 
 gdb、delve、perf
+
+
+
+#### 有哪些阻塞场景
+
+其实就是问哪些代码可以阻塞程序向下继续执行，这些代码有：channel/select；sync 包下的原子量和互斥量；sleep；网络IO（如http.Get）；文件IO；for/goto 循环
+
+
+
+#### 有哪些 panic 无法被 recover 捕获
+
+并发读写map；死锁；栈溢出；OOM
+
+
+
+#### 代码执行顺序
+
+先初始化导入的包 import，然后是常量 const、变量 var、init 函数
 
