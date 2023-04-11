@@ -36,7 +36,7 @@ ES的设计理念就是分布式搜索引擎，底层还是基于lucene，核心
 
 
 
-选主：ES集群有多个节点，会自动选取一个节点为主节点（基于 Zookeeper，或使用内置的  Zen Discovery）。这个master 节点就是干一些管理的工作，比如维护索引元数据，负责切换 primary shard 和 replic shard 身份等，要是master 节点宕机，那么会重新选举master。
+选主：ES集群有多个节点，会自动选取一个节点为主节点（基于 Zookeeper，或使用内置的  Zen Discovery）。这个master 节点就是干一些管理的工作，比如维护索引元数据，负责切换 primary shard 和 replic shard 身份等，要是 master 节点宕机，那么会重新选举 master。
 
 如果是从节点宕机了，那么主节点会让从节点上的 primary shard 的身份转移到其他机器上的 replica shard。从节点恢复后，主节点会控制将缺失的 replica shard 分配过去，同步后续修改的数据之类的，让集群回复正常。
 
