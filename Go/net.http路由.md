@@ -6,7 +6,7 @@
 type ServeMux struct {
 	mu    sync.RWMutex         // 读写锁，保障哈希表的异步安全
 	m     map[string]muxEntry  // 路由器真身，其实是原生golang hash map
-	es    []muxEntry           // 路由器真身2号，用来实现前缀匹配.
+	es    []muxEntry           // 路由器真身2号，用来实现前缀匹配
 	hosts bool                 // whether any patterns contain hostnames
 }
 
