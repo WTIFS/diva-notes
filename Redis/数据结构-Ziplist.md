@@ -1,3 +1,12 @@
+`ziplist` 是 Redis 中的一种紧凑型、压缩型、双向链表结构。
+
+在 `ziplist` 中，每个节点 `entry`由两部分字段组成：头部信息和数据信息。
+
+- 头部信息包括节点的长度、前一个节点的长度和节点的类型
+- 数据信息指向实际的数据。
+
+
+
 ## 结构
 
 ```go
@@ -12,21 +21,20 @@ type ziplist struct {
 
 
 
-其中 `entry` 的结构如下：
+虽然 redis 定义了节点 [zlentry](https://github.com/redis/redis/blob/6.0/src/ziplist.c) 结构体，但却没有用 `zlentry` 结构来存储节点。因为这个结构存小整数或短字符串太浪费空间，不符合压缩列表提高内存利用率的设计目的，因此，在 redis 中，并没有使用 `zlentry` 结构，而是定义了宏来表示压缩列表的节点。 `entry` 的实际结构如下：
 
 ```go
 type entry struct {
-    prevlength int8   // 上一个节点的长度，为了方便反向遍历 ziplist
-    union {
-        encoding    string      // 当前节点的编码规则
-        data        interface{} // 当前节点的值，可以是数字或字符串
-    }
+    prevlength int8         // 上一个节点的长度，为了方便反向遍历 ziplist
+    encoding    string      // 当前节点的编码规则
+    data        interface{} // 当前节点的值，可以是数字或字符串
 }
 ```
 
-为了节省内存，根据上一个节点的长度 `prevlength` 可以将 `ziplist` 节点分为两类：
-- `entry` 的前 `8` 位小于 `254`，则这 `8` 位就表示上一个节点的长度
-- `entry` 的前 `8` 位等于 `254`，则意味着上一个节点的长度无法用 `8` 位表示，后面 `32` 位才是真实的 `prevlength`。用 `254` 不用 `255(11111111)` 作为分界是因为`255` 是 `zlend` 的值，它用于判断 `ziplist` 是否到达尾部。
+`previous_entry_length`：前一个节点的长度，占 `1Byte` 或 `5Byte`
+
+- 如果前一个节点的长度小于 `254Byte` ，则需要 `1Byte` 来保存前一个节点的长度
+- 如果前一个节点的长度 `>= 254Byte` ，则需要 `5Byte` 来保存前一个节点的长度，第一个 `Byte` 固定为 `0xfe(254)`，后四个 `Byte` 表示前一个节点的长度。用 `254` 不用 `255(11111111)` 作为分界是因为`255` 是 `zlend` 的值，它用于判断 `ziplist` 是否到达尾部。
 
 
 
@@ -46,6 +54,10 @@ if (encoding == ZIP_INT_8B) {
     ret = i16;
 }
 ```
+
+![74be0cf64110c18388dbc04c83efc4f5.png](assets/zipentry.jpeg)
+
+
 
 
 

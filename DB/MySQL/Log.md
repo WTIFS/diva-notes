@@ -13,7 +13,7 @@
 具体来说，当有一条记录需要更新的时候，InnoDB 引擎会
 
 1. 先把记录写到 redo log 里面，并更新内存，这个时候更新就算完成了。
-2. 同时，InnoDB 引擎会在适当的时候，将这个操作记录更新到磁盘里面。这个更新往往是在系统比较空闲的时候做，就像打烊以后掌柜做的事。
+2. 同时，InnoDB 引擎会在适当的时候，将这个操作记录更新到磁盘里面。这个更新往往是在系统比较空闲的时候做，就像打烊以后掌柜才算今天赚了多钱。
 
 
 
@@ -21,7 +21,7 @@
 
 1. 提高持久化时写硬盘的性能
 2. 崩溃恢复时恢复最近数据
-   1. `redo log file` 记录着 xxx 页做了 xxx 修改，所以即使 `MySQL` 发生宕机，也可以通过 `redo log` 进行数据恢复，也就是说在内存中更新成功后，即使没有刷新到磁盘中，但也不会因为宕机而导致数据丢失。
+   1. `redo log file` 记录着 xxx 页做了 xxx 修改，所以即使 `MySQL` 发生宕机，也可以通过 `redo log` 进行数据恢复。
 
 
 
@@ -91,15 +91,15 @@ type redo log block struct {
 
 ```go
 type log block struct {
-	type                 // 操作类型（插入/删除）
-	space                // 空间ID
-	page_no              // 页偏移量，表示第几页
-	struct {             // 数据部分
-		offset           // 第几行
-		len & extra_info // 以下结构只有插入日志才有，删除日志没有
-		...
-		rec body         // 新的数据
-	}
+    type                 // 操作类型（插入/删除）
+    space                // 空间ID
+    page_no              // 页偏移量，表示第几页
+    struct {             // 数据部分
+        offset           // 第几行
+        len & extra_info // 以下结构只有插入日志才有，删除日志没有
+        ...
+        rec body         // 新的数据
+    }
 }
 ```
 
@@ -109,9 +109,7 @@ type log block struct {
 
 # binlog
 
-`MySQL` 整体来看，其实有两块：一块是 `Server` 层，它主要做的是功能层面的事情；还有一块是引擎层，负责存储相关的具体事宜。
-
-上面我们聊到的 `redo log` 是 `InnoDB` 引擎特有的日志，而 `Server` 层也有自己的日志，称为 `binlog`（归档日志）。
+在 [架构](./架构.md) 一文中讲到 `MySQL` 分为 `Server` 层和引擎层两层。`redo log` 是 `InnoDB` 引擎特有的日志，而 `Server` 层也有自己的日志，称为 `binlog`（归档日志）。
 
 为什么会有两份日志呢？因为最开始 `MySQL` 里并没有 `InnoDB` 引擎。`MySQL` 自带的引擎是 `MyISAM`，但 `MyISAM` 没有 `crash-safe` 的能力，`binlog` 日志只能用于归档。而 `InnoDB` 是另一个公司以插件形式引入 `MySQL` 的，既然只依靠 `binlog` 是没有 `crash-safe` 能力的，所以 `InnoDB` 使用另外一套日志系统——也就是 `redo log` 来实现 `crash-safe` 能力。
 
@@ -143,8 +141,8 @@ type log block struct {
 
 为什么必须有两阶段提交呢？这是为了让两份日志之间的逻辑一致。如果不采用该逻辑，在第二个日志还没有写完期间发生了 crash，会导致两个日志数据不一致，进而导致数据库的状态就 和 用日志恢复出来的库的状态 不一致。
 
->1. **先写 redo log 后写 binlog。**假设在 redo log 写完，binlog 还没有写完的时候，MySQL 进程异常重启。由于我们前面说过的，redo log 写完之后，系统即使崩溃，仍然能够把数据恢复回来，所以恢复后这一行 c 的值是 1。但是由于 binlog 没写完就 crash 了，这时候 binlog 里面就没有记录这个语句。因此，之后备份日志的时候，存起来的 binlog 里面就没有这条语句。然后你会发现，如果需要用这个 binlog 来恢复临时库的话，由于这个语句的 binlog 丢失，这个临时库就会少了这一次更新，恢复出来的这一行 c 的值就是 0，与原库的值不同。
->2. **先写 binlog 后写 redo log。**如果在 binlog 写完之后 crash，由于 redo log 还没写，崩溃恢复以后这个事务无效，所以这一行 c 的值是 0。但是 binlog 里面已经记录了“把 c 从 0 改成 1”这个日志。所以，在之后用 binlog 来恢复的时候就多了一个事务出来，恢复出来的这一行 c 的值就是 1，与原库不同。
+>1. **先写 redo log 后写 binlog。**假设在 redo log 写完，binlog 还没有写完的时候，MySQL 进程异常重启。由于我们前面说过的，redo log 写完之后，系统即使崩溃，仍然能够把数据恢复回来，所以恢复后这一行 c 的值是 1。但是由于 binlog 没写完就 crash 了，这时候 binlog 里面就没有记录这个语句。因此，之后备份日志的时候，存起来的 binlog 里面就没有这条语句。导致主库有从库没有；另外如果需要用这个 binlog 来初始化新从库的话，由于这个语句的 binlog 丢失，这个库就会少了这一次更新，恢复出来的这一行 c 的值就是 0，与原库的值不同。
+>2. **先写 binlog 后写 redo log。**如果在 binlog 写完之后 crash，由于 redo log 还没写，崩溃恢复以后这个事务无效，所以这一行 c 的值是 0。但是 binlog 里面已经记录了“把 c 从 0 改成 1”这个日志。所以，在之后用 binlog 来恢复的时候就多了一个事务出来，恢复出来的这一行 c 的值就是 1，与原库不同导致从库有主库没有
 
 
 
@@ -181,7 +179,7 @@ type log block struct {
   - 缺点：会产生大量的日志，尤其是 `ALTEWR TABLE` 的时候会让日志暴涨
 
 - `MIXED` 
-  - 基于 `STATMENT` 和 `ROW`两种模式的混合复制 (`mixed-based replication, MBR`)，一般的复制使用 `STATEMENT`模式，对 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存
+  - 基于 `STATMENT` 和 `ROW`两种模式的混合复制 (`mixed-based replication, MBR`)，一般的复制使用 `STATEMENT `模式，对 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存
 
 
 
@@ -224,7 +222,7 @@ type log block struct {
 ##### 为什么有了 binlog 还需要 redo log ?
 
 1. 历史原因：`innodb` 并不是 `MySQL` 的原生存储引擎。`MySQL` 的原生引擎是 `myISAM`，设计之初就没有支持崩溃恢复。
-2. 实现原因：通过分析 `redo log`，可以构建出崩溃时间点数据库的状态，得到所有崩溃前未提交的事务。而 `binlog` 记的是全量逻辑日志，得从头重放才可以，代价太大了
+2. 实现原因：`redo log` 只包含近期数据，文件较小，通过分析 `redo log`，可以构建出崩溃时间点数据库的状态，得到所有崩溃前未提交的事务。而 `binlog` 记的是全量逻辑日志，得从头重放才可以，代价太大了
 
 
 

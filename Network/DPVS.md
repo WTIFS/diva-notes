@@ -1,10 +1,10 @@
 ## DPVS简介
 
-**[DPVS](https://github.com/iqiyi/dpvs)** 是一个基于 [DPDK](https://www.dpdk.org/) 的高性能四层负载均衡器（Layer-4 load balancer，DPVS的名字来源于 DPDK + LVS，注意这里的LVS是 [阿里巴巴改进版的LVS](https://github.com/alibaba/LVS)。主要特点有：
+**[DPVS](https://github.com/iqiyi/dpvs)** 是一个基于 [DPDK](https://www.dpdk.org/) 的高性能四层负载均衡器（Layer-4 load balancer），由爱奇艺开发。DPVS的名字来源于 DPDK + LVS，注意这里的LVS是 [阿里巴巴改进版的LVS](https://github.com/alibaba/LVS)。主要特点有：
 
 1. 用户态实现
 2. Master / Worker 模型
-3. 网卡队列 & CPU 绑定 => 关键数据无锁化
+3. 资源（如网卡队列、连接表）分片、分到不同的 CPU 上，各 CPU 只处理自己的资源，无锁化
 
 
 
@@ -12,7 +12,7 @@
 
 DPVS主要的任务都是在用户态完成的，可以极大地提高效率。这主要是因为DPVS没有使用 `Linux` 复杂的协议栈，而是自研。采用轮询的方式收发数据包，避免了锁、内核中断、上下文切换、内核态和用户态数据拷贝产生的性能开销。
 
-**实际上四层负载均衡并不需要完整的协议栈，但是需要基本的网络组件**，以便完成和周围设备的交互（ARP/NS/NA）、确定分组走向 （Route）、回应 Ping 请求、健全性检查（分组完整性，Checksum校验）、以及 IP 地址管理等基本工作。使用 DPDK 提高了收发包性能，但也绕过了内核协议栈，DPVS 依赖的协议栈需要自己实现。
+实际上四层负载均衡并不需要完整的协议栈，但是需要基本的网络组件，以便完成和周围设备的交互（ARP/NS/NA）、确定分组走向 （Route）、回应 Ping 请求、健全性检查（分组完整性，Checksum校验）、以及 IP 地址管理等基本工作。使用 DPDK 提高了收发包性能，但也绕过了内核协议栈，DPVS 依赖的协议栈需要自己实现。
 
 
 
@@ -72,7 +72,7 @@ DPVS主要的任务都是在用户态完成的，可以极大地提高效率。�
 
 LVS / DPVS（综合性价比最好） 
 
-HaProxy（并发和CPU都）
+HaProxy（并发和CPU都高）
 
 Nginx（并发和CPU都低）
 

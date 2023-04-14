@@ -17,17 +17,18 @@ dip： destination ip
 
 ## LVS的几种转发模式
 
-- DR模型 -- （Director Routing-直接路由）
-- NAT模型 -- (NetWork Address Translation-网络地址转换)
-- fullNAT -- （full NAT）
-- ENAT --（enhence NAT 或者叫三角模式/DNAT，阿里云提供）
-- IP TUN模型 -- (IP Tunneling - IP隧道)
+- DR模型 -- (Director Routing - 直接路由，替换MAC地址)
+- NAT模型 -- (NetWork Address Translation - 网络地址转换，源地址替换)
+- FULLNAT --  (FULL NAT)
+- IP 隧道模型 -- (IP Tunneling)
 
 
 
 
 
 ## DR模型(Director Routing--直接路由)
+
+简单来说：客户端发送给 LVS，LVS 转发给 RS，RS 直接回复客户端
 
 1. 请求流量 (sip 200.200.200.2, dip 200.200.200.1) 先到达 LVS
 2. LVS 根据负载策略选择一个 RS，然后将这个网络包的 MAC 地址修改成该RS的 MAC
@@ -55,6 +56,8 @@ dip： destination ip
 
 
 ## NAT模型 (NetWork Address Translation - 网络地址转换)
+
+客户端发送给 LVS，LVS 转发 RS，RS 回复 LVS，LVS 转发给客户端
 
 1. client 发出请求（sip 200.200.200.2，dip 200.200.200.1）
 2. 请求包到达lvs，lvs修改请求包为（dip rip）

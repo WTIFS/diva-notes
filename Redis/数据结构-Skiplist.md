@@ -2,7 +2,7 @@
 
 跳表是可以实现二分查找的有序链表，实现原理是将多个链表在纵向串起来，在原有的有序链表上面增加了多级索引，通过索引来实现快速查找。
 
-主要用于有序集合。
+主要用于有序集合 `Zset` 结构里，按 `score` 排序 `member`
 
 
 
@@ -10,7 +10,7 @@
 
 1. 最低层包含所有的元素
 2. 每个索引节点包含两个指针，一个向下，一个向右
-3. 插入元素时，先插入最底层，然后以 `1/4` 的概率插入上层（最大层高 = `32`）。这样随机生成它的层高
+3. 插入元素时，先插入最底层，然后以 `1/4` 的概率插入上层（最大层高 = `32`）。这样随机生成它的最高层高
 4. 跳表查询、插入、删除的时间复杂度为 `O(log n)`，与平衡二叉树接近
 
 ![img](assets/20160131083150090.jpeg)
@@ -22,13 +22,19 @@
 ### 跳表 VS 二叉树
 
 1. 范围查找更快。二叉树需要不断的中序遍历，性能较差。
-2. 跳表更紧凑，省空间。每个节点平均 `1.33` 个指针。二叉树是 `2` 个指针。
+2. 跳表更紧凑，省空间。每个节点平均 `1 + 0.25 + 0.25² + ... + 0.25^31 = 1.33` 个指针。二叉树是 `2` 个指针。
   
 4. 跳表实现更简单。二叉树增删元素时可能需要调整多层节点；跳表只需调整前后的邻节点。
 
-```mathematica
-每个节点的平均层数 = 1*p + 2*p(1-p) + ... + 32*p^31(1-p) = (1-p) * sum[np^(n-1)] = (1-p) * 1/(1-p)^2 = 1/(1-p) = 4/3
-```
+
+
+### 跳表 VS B+树
+
+1. 跳表写数据时只需生成随机层数，没有旋转和维持树平衡的开销，因此写入性能优于B+树
+2. 同样量级的数据，B+树层高比跳表矮，因此查询比B+树快
+    1. facebook 的 rocksDB 用了B+树，就是写性能贼强，读性能差点
+3. Redis 的数据都存在内存，不需要像 MySQL 一样按页从磁盘加载数据到内存，因此层高不再是跳表的劣势
+
 
 
 
@@ -75,9 +81,9 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     
     level = zslRandomLevel(); // 随机生成本次插入的层数，每多一层，概率*0.25
     
-    x = zslCreateNode(level,score,ele);
+    x = zslCreateNode(level,score,ele);                   // 新建层数=level 的 entry 节点
     for (i = 0; i < level; i++) {
-        x->level[i].forward = update[i]->level[i].forward; // 将 x.next 指向原下一个节点
+        x->level[i].forward = update[i]->level[i].forward; // 将 x.forward 指向原下一个节点
         update[i]->level[i].forward = x;  
     }
 }
@@ -91,6 +97,15 @@ int zslRandomLevel(void) {
         level += 1;
     return (level<ZSKIPLIST_MAXLEVEL) ? level : ZSKIPLIST_MAXLEVEL;
 }
+
+// new 一个跳表 node 结构
+zskiplistNode *zslCreateNode(int level, double score, sds ele) {
+    zskiplistNode *zn =
+        zmalloc(sizeof(*zn)+level*sizeof(struct zskiplistLevel));
+    zn->score = score;
+    zn->ele = ele;
+    return zn;
+}
 ```
 
 
@@ -99,7 +114,27 @@ int zslRandomLevel(void) {
 
 [随机层数的概率为什么是 p=0.25?](https://github.com/redis/redis/pull/3889)
 
-这个值是对空间和时间的权衡。p值约大，查询速度就越快（因为上层索引多），但占用的空间也越多。
+这个值是对空间和时间的权衡。p 值太大的话，上层索引节点数量太多，上层几乎退化成顺序遍历，相当于没有索引；p 值太小，上层索引过于稀疏，起不到作用，最后也只能到最下层顺序遍历。
+
+
+
+[为什么使用跳表而不用二叉树?](https://news.ycombinator.com/item?id=1171423)
+
+见上面
+
+
+
+###### 手绘一个跳表看看？
+
+```go
+head         5                  tail
+head 1       5       9       12 tail
+head 1 2 3 4 5 6 7 8 9 10 11 12 tail
+```
+
+比如要查找分值 [6 ~ 8] 的元素，第一层查到 [5, tail)，第二层查到 [5, 9]，第三层就在 [5,6,7,8,9] 里遍历查找
+
+
 
 
 

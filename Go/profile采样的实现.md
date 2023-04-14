@@ -19,7 +19,7 @@
 // 开启CPU采样，并设置频率
 func StartCPUProfile(w io.Writer) error {
     cpu.profiling = true
-	runtime.SetCPUProfileRate(hz)
+	  runtime.SetCPUProfileRate(hz)
     go profileWriter(w)
 }
 ```
