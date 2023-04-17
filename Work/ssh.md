@@ -4,7 +4,6 @@
 
 ```
 ssh-copy-id -p 端口 -i ~/.ssh/id_rsa.pub 用户名字@192.168.x.xxx
-
 ```
 
 
