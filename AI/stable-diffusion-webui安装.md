@@ -146,6 +146,8 @@ Lora模型放到 `models/Lora` 文件夹下
 
 Lora模型插件（现在 WebUI 已经内置 Lora功能了，一般不用）：https://github.com/kohya-ss/sd-webui-additional-networks
 
+https://github.com/continue-revolution/sd-webui-segment-anything
+
 
 
 
