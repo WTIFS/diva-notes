@@ -1,0 +1,1 @@
+[沉浸式翻译 - Immersive Translate](https://immersive-translate.owenyoung.com/installation)

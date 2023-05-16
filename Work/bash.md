@@ -7,6 +7,19 @@ lsof -i:8080
 
 
 
+##### awk
+
+统计前10 IP：
+
+```bash
+sudo tcpdump -i em1 -tnn -c 10000 | awk -F "." '{print $1"."$2"."$3"."$4}' | sort | uniq -c | sort -nr | head -n 10
+# awk -F 指定分隔符
+# sort -n 按照整个数字排序
+# sort -r 倒序
+```
+
+
+
 ##### 服务列表 
 
 ```
@@ -15,7 +28,7 @@ systemctl list-units --type=service
 
 
 
-**日期**
+##### 日期
 
 ```
 date +"%Y-%m-%d %H:00" -d "1 hour ago"

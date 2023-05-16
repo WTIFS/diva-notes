@@ -146,6 +146,8 @@ Lora模型放到 `models/Lora` 文件夹下
 
 Lora模型插件（现在 WebUI 已经内置 Lora功能了，一般不用）：https://github.com/kohya-ss/sd-webui-additional-networks
 
+https://github.com/continue-revolution/sd-webui-segment-anything
+
 
 
 
@@ -256,3 +258,6 @@ Lora角色滤镜扩展教程：https://sparkly-day-9db.notion.site/AI-1962de6fa0
 - 真人风格 ChilloutMix: https://civitai.com/models/6424/chilloutmix
 - korean Doll Likeness(Lora): https://huggingface.co/dadadadadatou/KbrDollLikeness/tree/main
 - St. Louis (Luxurious Wheels) (Azur Lane) (Lora): https://civitai.com/models/6669/st-louis-luxurious-wheels-azur-lane
+
+
+

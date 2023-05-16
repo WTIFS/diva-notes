@@ -18,6 +18,25 @@ WAN: Wide Area Network，广域网
 
 
 
+#### HTTP协议的组成
+
+方法 + 资源路径 + 版本 + header头部 + body正文
+
+```html
+<method> <URL> <version>
+<headers>
+
+<request body>
+```
+
+头部和正文如何分割：头部和请求正文之间使用一个空行分割
+
+cookie 在哪一部分：header
+
+```
+Cookie: name=value; name2=value2
+```
+
 
 
 #### 常见的HTTP Headers

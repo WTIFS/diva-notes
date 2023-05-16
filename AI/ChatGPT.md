@@ -4,7 +4,7 @@ ChatGPT 其实本质上非常简单，它没有理解你的问题，也没有去
 
 然后它又用"很高"作为上下文，计算出下一个字是"兴"。以此类推，直到输出一段完整的话，比如"很高兴见到你"。
 
-所以它实际上并没有理解你的问题，也没有构思出回答你问题的解答思路，它就是一个字一个字地往下猜，直到拼接成一句话或一段话。
+所以它实际上并没有理解你的问题，也没有构思出回答你问题的解答思路，它就是一个字一个字地往下猜，直到拼接成一句话或一段话。这也是 Copilot 的实现原理。
 
 
 
@@ -42,6 +42,18 @@ GPT-3  45TB  1750亿
 
 而后，最早在计算机视觉里应用的 Attention机制被拿来用在了自然语言处理。该机制的思想就是把注意力集中在重要的信息上，而忽视不重要的信息（可见Attention图解<sup>2</sup>）。2017年，Google的研究人员发表了《Attention Is All You Need》<sup>3</sup>，这篇文章中的 Transformer 模型是 GPT的基石，整个网络结构是由Attention 机制组成<sup>4</sup>，并且将序列中的任意两个位置之间的距离缩小为一个常量，其次 Transformer 具有好的并行性，符合现有的GPU框架。这里必须要提一下：Transformer设置了一种“位置编码”（position encoding）机制，用来向序列数据添加位置信息，进而让模型学到“顺序”。做法简单巧妙：用正弦、余弦函数生成沿时间轴变化的波形，然后把这种波形叠加到 Transformer 的输入中。
 
+GPT 是基于 Transformer 的模型，全称 Generative Pre-Training Transformer。去掉了Transformer的多头注意力（Multi-head Attention），然后在进行模型输出时，利用特定的下游任务进行微调（分类任务、自然语言推理、语义相似度、问答和常识推理）。具体而言，GPT采用了Hinton等人2006年提出的一种经典的神经网络训练策略：“预训练+微调”的二段式训练策略<sup>7</sup>。在预训练阶段，首先基于庞大的生语料训练一个生成式语言模型；在微调阶段，使用标注数据继续训练模型。
+
+这样的生成式模型可以给他输入N个单词（也称为Token）的序列，输出是最有可能在输入序列末尾放置的单词的预测。即词语接龙
+
+从GPT模型提出以来，OpenAI就在不断进行模型优化。GPT系列的模型结构秉承了不断堆叠Transformer的思想，通过不断的提升训练语料的规模和质量，提升网络的参数数量来完成GPT系列的迭代更新<sup>8</sup>。其中，GPT3模型是ChatGPT的基石，该模型拥有1750亿的参数，利用45TB的数据进行训练，其训练费用高达1200多万美元
+
+<img src="assets/gpt_evolution.png" alt="图片" style="zoom:50%;" />
+
+InstructGPT 是 ChatGPT 最初始的模型了，而后，模型又加入了RLHF策略（Reinforcement Learning from Human Feedback，基于人工反馈的强化学习）
+
+
+
 
 
 
@@ -51,3 +63,7 @@ GPT-3  45TB  1750亿
 [闪客-人机](https://mp.weixin.qq.com/s/tHgGtsWBDyM7v-nkiwHVzQ)
 
 [shutianma - 一篇不是很枯燥的ChatGPT闲谈](https://mp.weixin.qq.com/s/EohQySoEAyGtzxRcqAolwQ)
+
+[微软的DeepSpeed](https://github.com/microsoft/DeepSpeed/blob/master/blogs/deepspeed-chat/chinese/README.md)
+
+[langchain - 自动将过往会话带入 ChatGPT API 请求体中](https://github.com/microsoft/DeepSpeed/blob/master/blogs/deepspeed-chat/chinese/README.md)

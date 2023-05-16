@@ -29,6 +29,18 @@ killall Dock
 
 
 
+##### 设置默认输入法
+
+[KeyboardHolder](https://github.com/leaves615/KeyboardHolder)
+
+
+
+##### 时钟屏保
+
+https://fliqlo.com/screensaver/
+
+
+
 ##### oh-my-zsh 安装
 
 ```shell

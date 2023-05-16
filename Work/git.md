@@ -17,7 +17,7 @@ git config --global --get user.email
 [includeIf "gitdir:github.com/"]
     path = ./.github
 
-[includeIf "gitdir:git.woa.com/"]
+[includeIf "gitdir:gitlab.xx.com/"]
     path = ./.gitlab
 ```
 
