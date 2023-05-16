@@ -1,3 +1,7 @@
+etcd 实际上是一个分布式 kv 存储。搭配一些开源库可以用于服务注册与发现，如 k8s 就使用了 etcd 作为存储并基于它实现了服务注册与发现
+
+
+
 # 模块
 
 1. 用于与客户端交互和底层 raft 模块通信的  etcd-server
@@ -39,7 +43,17 @@
 - 2.4：通知最上层的 etcd server  该日志已经 commit。
 - 2.5：etcd server 调用 applierV3 模块将日志写入持久化存储中。
 - 2.6：etcd server 应答客户端该数据写入成功。
-- 2.7：最后 etcd server 调用 etcd raft，修改其 raftLog 模块的数据，将这条日志写入 raftLog storage 中。
+- 2.7：最后 etcd server 调用 etcd raft，修改其 raftLog 模块的数据，将这条日志写入 raftLog storage 中
+
+
+
+# etcd 对比 consul、zk
+
+etcd：简单易用，不需要集成 sdk，有 watch 机制；需配合第三方工具实现服务发现
+
+zk：功能强大，有 watch 机制，需要在服务中集成 sdk；JAVA 编写
+
+consul：使用 gossip 协议，支持多数据中心；watch 机制是通过定期健康检查机制实现的，并且数据变更后需要客户端自己再拉一遍数据，不够实时
 
 
 
