@@ -39,3 +39,13 @@ git config --global --get user.email
 
 
 
+##### 将 http 方式替换为 ssh
+
+修改 `~/.gitconfig` 文件：
+
+```text
+[url "git@gitlab.xxx.com:"]
+    insteadOf = https://gitlab.xxx.com/
+[url "git@gitlab.xxx.com:"]
+	  insteadOf = http://gitlab.xxx.com
+```
