@@ -47,5 +47,5 @@ git config --global --get user.email
 [url "git@gitlab.xxx.com:"]
     insteadOf = https://gitlab.xxx.com/
 [url "git@gitlab.xxx.com:"]
-	  insteadOf = http://gitlab.xxx.com
+    insteadOf = http://gitlab.xxx.com
 ```
