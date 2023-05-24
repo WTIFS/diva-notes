@@ -1,3 +1,5 @@
+##### 设置全局用户名和邮箱
+
 ```bash
 git config --global user.name
 git config --global user.email
@@ -49,3 +51,14 @@ git config --global --get user.email
 [url "git@gitlab.xxx.com:"]
     insteadOf = http://gitlab.xxx.com
 ```
+
+
+
+##### 设置默认推送同名分支
+
+```bash
+git config --global --add push.default current
+```
+
+
+

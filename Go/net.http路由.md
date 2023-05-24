@@ -17,10 +17,9 @@ type muxEntry struct {
 }
 ```
 
-可以看到，里面的路由是用一个 `map` 和 路径切片 实现的。匹配路由时先查找 `map` 里有没一样的，没有的话再遍历切片，检查前缀，寻找匹配上的。
+可以看到，里面的路由是用一个 `map` 和 路径切片 实现的。匹配路由时先查找 `map` 里有没一样的，没有的话再遍历切片，检查前缀，寻找第一个匹配上的。
 
 ```go
-// Most-specific (longest) pattern wins.
 func (mux *ServeMux) match(path string) (h Handler, pattern string) {
    
 	v, ok := mux.m[path]  // 直接从hash map中查entry是否存在
@@ -30,7 +29,7 @@ func (mux *ServeMux) match(path string) (h Handler, pattern string) {
 
 	for _, e := range mux.es { // 遍历切片，找前缀
 		if strings.HasPrefix(path, e.pattern) {
-			return e.h, e.pattern
+			return e.h, e.pattern // 找到就返回
 		}
 	}
 	return nil, ""
@@ -38,6 +37,20 @@ func (mux *ServeMux) match(path string) (h Handler, pattern string) {
 ```
 
 
+
+##### gorilla/mux
+
+直接顺序遍历路由切片，使用正则匹配，返回第一个匹配上的。因此如果有多个相同开头的路由，应该尽量把精确的往前放
+
+```go
+func (r *Router) Match(req *http.Request, match *RouteMatch) bool {
+	for _, route := range r.routes {
+		if route.Match(req, match) {
+            return true // 找到就返回
+        }
+    }
+}
+```
 
 
 
