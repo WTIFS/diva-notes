@@ -248,6 +248,18 @@ func (es *bodyEOFSignal) condfn(err error) error {
 
 
 
+# 总结
+
+想要正确的复用连接并且不造成内存泄露，需要至少做两点：
+
+1. 读走 `resp.Body` 里的内容（否则连接不会放回池子里复用，后面的请求会直接新建连接）
+   1. 如果不需要请求体里的内容，可用如下代码读走：`io.Copy(io.Discard, resp.Body)`
+2. 调用 `resp.Close()` 释放本次连接中起的两个读写协程
+
+
+
+
+
 # 参考
 
 [咏春警告的胖虎 - i/o timeout ， 希望你不要踩到这个net/http包的坑](https://mp.weixin.qq.com/s/UBiZp2Bfs7z1_mJ-JnOT1Q)

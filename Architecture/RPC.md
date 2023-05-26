@@ -64,6 +64,10 @@
 
 
 
+![微服务架构](assets/微服务架构.png)
+
+
+
 # Dubbo
 
 ![img](assets/16f8d566-8920-4d52-a483-fde49ad9c5c5.png)
