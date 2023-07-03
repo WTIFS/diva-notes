@@ -29,6 +29,19 @@ killall Dock
 
 
 
+**MySQL安装**
+
+到 https://dev.mysql.com/downloads/mysql/ 下载包并安装，安装后增加环境变量：
+
+```
+export PATH=$PATH:/usr/local/mysql/bin
+export PATH=$PATH:/usr/local/mysql/support-files
+```
+
+
+
+
+
 ##### 设置默认输入法
 
 [KeyboardHolder](https://github.com/leaves615/KeyboardHolder)

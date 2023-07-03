@@ -183,3 +183,13 @@ $- 显示shell使用的当前选项，与set命令功能相同
 
 -le       //小于等于
 
+
+
+**nohup**
+
+```
+nohup java -jar xxxxxx.jar > nohup.out 2>&1 &
+```
+
+
+
