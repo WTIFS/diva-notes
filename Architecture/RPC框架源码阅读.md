@@ -1,6 +1,14 @@
 [TOC]
 
-### **魔改流派：mrpc/trpc/dubbo-go/tars**
+# grpc
+
+grpc 是自带名字解析、负载均衡和连接池策略的。使用 gprc.Dial 方法实际上建立的是到远端服务的虚拟连接，它实际是在服务的每台实例上建立了一个连接（sub connection），默认使用轮询策略从多个实例中进行负载均衡。
+
+
+
+# 魔改流派：mrpc/trpc/dubbo-go/tars
+
+这个流派主要是对 protoc 的插件进行修改，使之生成的 pb 文件发生改变，在其中注入自己的逻辑
 
 无论服务端还是客户端都需要先通过 `Init` 方法初始化，从配置中心拉取配置
 
@@ -35,7 +43,7 @@ cli.Hi() // 里面实际调用 cli.pool.GetConn().Invoke() 方法，即 grpc 的
 
 
 
-### **原生流派：go-zero/tt**
+# 原生流派：go-zero/tt
 
 **服务端**
 
@@ -59,7 +67,7 @@ cli.Hi()
 
 
 
-### **自研流派：go-micro/trpc**
+# 自研流派：go-micro/trpc
 
 `NewService` 方法返回 `Service` 接口，接口提供 `Init()、Run()、Client()、Server()` 方法
 
