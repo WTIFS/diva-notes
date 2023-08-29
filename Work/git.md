@@ -62,3 +62,20 @@ git config --global --add push.default current
 
 
 
+##### CentOS 升级 git 版本
+
+```
+yum -y install curl-devel
+
+wget https://www.kernel.org/pub/software/scm/git/git-2.32.0.tar.gz
+
+tar -zxvf git-2.9.5.tar.gz
+
+cd git-2.32.0
+./configure –prefix=/usr/local/git
+
+make && make install
+
+
+```
+
