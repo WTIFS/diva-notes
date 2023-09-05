@@ -75,7 +75,21 @@ cd git-2.32.0
 ./configure –prefix=/usr/local/git
 
 make && make install
+```
 
 
+
+##### 添加多个远端
+
+```bash
+# [alias]是你给新远程仓库起的名字（例如origin，upstream，或其他），[url]是新远程仓库的URL
+git remote add [alias] [url]
+# 拉取远端分支
+get fetch [alias] 远端分支名1:本地分支名1
+
+git checkout main
+git branch 新分支2
+git checkout 新分支2
+git merge --no-ff 分支1（合并远端更新到分支2上）（--allow-unrelated-histories）
 ```
 
