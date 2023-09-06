@@ -93,3 +93,15 @@ git checkout 新分支2
 git merge --no-ff 分支1（合并远端更新到分支2上）（--allow-unrelated-histories）
 ```
 
+
+
+##### rebase 合并多次 commit
+
+```bash
+git log 找到要合并的最早的提交的前一次提交的 hash
+git rebase -i hash
+
+# 此时会弹出 vim
+# 不想保留的前面的 pick 改成 s
+```
+
