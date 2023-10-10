@@ -35,7 +35,10 @@ tcpdump -i em1 -tnn -c 1000 | awk -F "." '{print 1"."2"."3"."4}' > tcp.log
 ##### 按IP排序
 
 ```bash
-sudo tcpdump -i em1 -tnn -c 10000 | awk -F "." '{print $1"."$2"."$3"."$4}' | sort | uniq -c | sort -nr | head -n 10
+# $5=打印第5列；-d:=用:分隔；-f1=取分隔后的第一列
+netstat -nat | grep "ESTABLISHED" | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr | head -n 10
+
+sudo tcpdump -i eth0 -tnn -c 10000 | awk -F "." '{print $1"."$2"."$3"."$4}' | sort | uniq -c | sort -nr | head -n 10
 ```
 
 
@@ -44,6 +47,10 @@ sudo tcpdump -i em1 -tnn -c 10000 | awk -F "." '{print $1"."$2"."$3"."$4}' | sor
 
 ```
 netstat -an | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
+
+netstat -nat | grep -i "established" | wc -l
+ss -t state established | wc -l
+
 ```
 
 

@@ -102,6 +102,15 @@ git log 找到要合并的最早的提交的前一次提交的 hash
 git rebase -i hash
 
 # 此时会弹出 vim
-# 不想保留的前面的 pick 改成 s
+# 保留第一行 pick ，其余的全改成 s
+# 然后再编辑一次 commit log
+```
+
+
+
+##### 保存密码
+
+```bash
+git config --global credential.helper 'cache –timeout=3600' #保存一小时
 ```
 
