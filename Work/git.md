@@ -104,6 +104,8 @@ git rebase -i hash
 # 此时会弹出 vim
 # 保留第一行 pick ，其余的全改成 s
 # 然后再编辑一次 commit log
+
+然后 git push origin 分支名 --force
 ```
 
 
