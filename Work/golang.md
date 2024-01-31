@@ -15,3 +15,9 @@ gomonkey 不支持 Mac M2 芯片：使用如下方法运行测试：
 ##### gomod graph
 
 绘制依赖图
+
+
+
+**安装**
+
+wget 

@@ -4,7 +4,7 @@
 
 
 
-1. 添加源
+1. 添加源（CentOS）
 
 ```bash
 curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh" | sudo bash
@@ -56,7 +56,7 @@ stages:
 build-job:
   stage: build
   tags:
-    - xxx
+    - xxx # 使用的 gitlab-runner 的 tag 名称
   only:
     - merge_requests
   script:

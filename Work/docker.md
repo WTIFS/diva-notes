@@ -11,9 +11,9 @@ docker run -it --name 容器名称 -v 容器外目录:容器内目录 镜像名 
 ```
 docker run -it --name golang -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root golang:latest /bin/bash
 
-docker run -it --name golang1.17-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root --platform linux/amd64 golang:1.17 /bin/bash
+docker run -it --name golang1.17-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.17 /bin/bash
 
-docker run -it --name golang1.21-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root --platform linux/amd64 golang:1.21 /bin/bash
+docker run -it --name golang1.21-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.21 /bin/bash
 
 docker run -it --name gcc -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root gcc /bin/bash
 
@@ -62,7 +62,9 @@ docker restart {containerID}
 ##### 启动北极星
 ```bash
 docker run -d --name polaris-server -p 8190:8090 -p 8191:8091 polarismesh/polaris-server
-docker run -d --name polaris-console -p 8180:8080 --link polaris-server
+docker run -d --name polaris-console -p 8180:8080 --link polaris-server polarismesh/polaris-console
+
+docker run -d --name polaris-console --net=host polarismesh/polaris-console
 
 docker run -d --name polaris-server -p 8090:8090 -p 8091:8091 polarismesh/polaris-server
 ```
@@ -72,5 +74,29 @@ docker run -d --name polaris-server -p 8090:8090 -p 8091:8091 polarismesh/polari
 # 16686: jaeger UI 端口
 # 14268: jaeger API 端口
 # 6831 jaeger agent 端口
-docker run -d -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 -p 16686:16686 -p 14268:14268  -p 14269:14269   -p 9411:9411 -p 6831:6831/udp jaegertracing/all-in-one:latest
+docker run -d -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 --net=host jaegertracing/all-in-one:latest
+
+docker run -d -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 -p 16686:16686 -p 14268:14268  -p 14269:14269 -p 9411:9411 -p 6831:6831/udp jaegertracing/all-in-one:latest
 ```
+
+**启动 apollo**
+
+```bash
+git clone apollo-quick-start
+docker-compose up
+```
+
+**启动mongo**
+
+```bash
+docker run -d --name mongo -p 27017:27017 mongo
+```
+
+
+
+编译
+
+```
+docker build -t harbor-v2.mobvista.com/dsp/mongo_checker:t0.0.7 -f docker/Dockerfile .
+```
+
