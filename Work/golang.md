@@ -18,6 +18,19 @@ gomonkey 不支持 Mac M2 芯片：使用如下方法运行测试：
 
 
 
-**安装**
 
-wget 
+#### 单测
+
+查看增量单测覆盖率详情
+
+```bash
+pip install diff_cover
+
+go install github.com/axw/gocov/gocov@latest
+go install github.com/AlekSi/gocov-xml@latest
+
+go test -gcflags "all=-N -l" -v ./... -coverprofile=cover.out
+gocov convert cover.out | gocov-xml > coverage.xml
+diff-cover coverage.xml --compare-branch=master --html-report report.html
+# 打开 report.xml
+```
