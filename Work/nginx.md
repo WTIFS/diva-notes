@@ -13,18 +13,27 @@ yum install nginx
 
 # 阿里云购买免费版SSL证书
 
-搜一下SSL证书，免费购买后 curl 下载到服务器上
+1. 进阿里云搜一下SSL证书，免费申请。等待申请通过后点击下载，然后会有个下载链接，复制链接
+2. 登录进服务器后，执行以下命令下载证书到服务器上
 
 ```bash
-unzip xxx.zip
+cd /alidata/server/nginx/conf/cert
 
-cd /etc/nginx
-mkdir cert
-mv 证书 cert/
-vim nginx.conf
+# 注意在链接前后加引号
+wget 'https://cas-documents-service.oss-cn-shanghai.aliyuncs.com/xxxxxx'
+
+# 解压缩上述下载的文件
+unzip xxxxxx
+
+# 重启 nginx
+nginx -s reload
 ```
 
 
+
+
+
+以下为 https 详细配置
 
 ```bash
 http {
@@ -39,8 +48,8 @@ http {
         listen       443 ssl http2;
         server_name  你的域名;
 
-        ssl_certificate "证书.pem";
-        ssl_certificate_key "证书.key";
+        ssl_certificate "/alidata/server/nginx/conf/cert/证书.pem";
+        ssl_certificate_key "/alidata/server/nginx/conf/cert/证书.key";
         ssl_session_timeout  10m;
         #表示使用的加密套件的类型
         ssl_ciphers ECDHE-RSA-AES128-GCM-SHA256:ECDHE:ECDH:AES:HIGH:!NULL:!aNULL:!MD5:!ADH:!RC4;

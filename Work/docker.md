@@ -62,11 +62,9 @@ docker restart {containerID}
 ##### 启动北极星
 ```bash
 docker run -d --name polaris-server -p 8190:8090 -p 8191:8091 polarismesh/polaris-server
-docker run -d --name polaris-console -p 8180:8080 --link polaris-server polarismesh/polaris-console
-
 docker run -d --name polaris-console --net=host polarismesh/polaris-console
 
-docker run -d --name polaris-server -p 8090:8090 -p 8091:8091 polarismesh/polaris-server
+docker run -d --name polaris-standalone --net=host polarismesh/polaris-standalone:latest
 ```
 
 ##### 启动 jaeger
@@ -82,7 +80,7 @@ docker run -d -e COLLECTOR_ZIPKIN_HTTP_PORT=9411 -p 16686:16686 -p 14268:14268  
 **启动 apollo**
 
 ```bash
-git clone apollo-quick-start
+git clone https://github.com/apolloconfig/apollo-quick-start.git
 docker-compose up
 ```
 

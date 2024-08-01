@@ -163,3 +163,12 @@ vim /etc/profile.d/sh.local
 export PATH=/data/lib/git2.17.1:$PATH
 ```
 
+
+
+##### tag 命名规范
+参考：https://acenet-arc.github.io/git-collaboration/08-Tags-Releases/index.html
+
+- `X.Y.Z-dev`: A development snapshot leading up to version `X.Y.Z`
+- `X.Y.Z-alpha`: An “alpha” release leading up to version `X.Y.Z` intended for internal testing.
+- `X.Y.Z-beta2`: The second “beta” release leading up to version `X.Y.Z` intended for external testing.
+- `X.Y.Z-rc1`: The first “Release Candidate” of upcoming version `X.Y.Z`. If no significant errors are found, this commit could also receive the `vX.Y.Z` tag, otherwise a `-rc2` release might follow.
