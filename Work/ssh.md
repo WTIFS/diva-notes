@@ -26,3 +26,32 @@ ClientAliveInterval 60
 ClientAliveCountMax 5
 ```
 
+
+
+##### 创建用户
+
+```bash
+useradd 用户名
+```
+
+
+
+##### 清除用户密码
+
+```bash
+passwd -d 用户名
+```
+
+
+
+##### 授予用户root权限
+
+```
+vim /etc/sudoers
+
+## Allow root to run any commands anywhere
+用户名   ALL=(ALL)       ALL
+```
+
+
+

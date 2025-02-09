@@ -25,3 +25,29 @@ export PATH=$PATH:$PROTOBUF/bin
 protoc --version
 ```
 
+
+
+编译 pb 文件
+
+```go
+protoc --go_out=plugins=grpc:. hello.proto
+```
+
+
+
+#### protoc-gen-go
+
+你可以修改 protoc-gen-go 的源码，并依此编译自己的插件
+
+源码地址：https://github.com/golang/protobuf
+
+```bash
+cd protoc-gen-go
+go build main.go
+mv main /Users/xxx/Projects/go/bin/protoc-gen-go
+
+然后 
+protoc -I=. --go_out=. hello.proto
+protoc -I=. --go-grpc_out=.  hello.proto
+```
+

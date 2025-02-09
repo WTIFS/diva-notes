@@ -172,12 +172,14 @@ type log block struct {
   - 基于 `SQL` 语句的复制  (`statement-based replication, SBR`)，每一条会修改数据的 `SQL` 语句都会记录到 binlog 中 
   - 优点：不需要记录每一行的变化，减少了 binlog 日志量，节约了 `IO`, 从而提高了性能
   - 缺点：在某些情况下会导致主从数据不一致，比如执行获取当前时间命令等
-
+  - 例：`update table set age=5 where id<5`，从库就会照着这个语句执行
+  
 - `ROW` 
   - 基于行的复制 (`row-based replication, RBR`)，不记录每条 `SQL` 语句的上下文信息，仅需记录哪条数据被修改了。
   - 优点：不会出现某些特定情况下的存储过程 / function / trigger 的调用和触发无法被正确复制的问题
   - 缺点：会产生大量的日志，尤其是 `ALTEWR TABLE` 的时候会让日志暴涨
-
+  - 例：`update table set age=5 where id<5`，从库会改成执行 `update table set age=5 where id=1` 一直到 `where id=5`
+  
 - `MIXED` 
   - 基于 `STATMENT` 和 `ROW`两种模式的混合复制 (`mixed-based replication, MBR`)，一般的复制使用 `STATEMENT `模式，对 `STATEMENT` 模式无法复制的操作使用 `ROW` 模式保存
 
