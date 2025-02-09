@@ -1,3 +1,7 @@
+## 安装 zsh 后好像就不用设这些了
+
+
+
 ##### 按单词前进、后退、删除
 
 进入 *Preferences > Profiles > Keys > General*，先将 `Left option` 勾选为 `+Esc`。再新增 3 个快捷键：
