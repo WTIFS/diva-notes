@@ -128,7 +128,7 @@ git config --global credential.helper 'cache –timeout=3600' #保存一小时
 yum remove git
 
 2.安装必要的依赖
-yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker
+yum install curl-devel expat-devel gettext-devel openssl-devel zlib-devel gcc perl-ExtUtils-MakeMaker libcurl-devel
 
 3.切换到路径
 mkdir -p /data/lib

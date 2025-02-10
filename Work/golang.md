@@ -35,3 +35,35 @@ diff-cover coverage.xml --compare-branch=master --html-report report.html
 go tool cover -html=coverage.out  
 ```
 
+
+
+#### gitlab-runner 集成
+
+gitlab-ci.yml 中增加以下配置：
+
+```
+make test = go test -gcflags "all=-N -l" -cover -v -test.short `go list ./... | grep -vE 'example|test|mock'`
+
+unit-test:
+  stage: test
+  tags:
+    - xxx
+  only:
+    - merge_requests
+  script:
+    - make test > test.out
+    - go-junit-report -in test.out -iocopy -out coverage.xml | grep coverage
+  artifacts:
+    paths:
+      - coverage.xml
+    reports:
+      junit: coverage.xml
+```
+
+
+
+`gitlab - Settings - CI/CD - General pipelines` 中的 `Test coverage parsing` 增加以下配置：
+
+```
+\d+.\d+% of statements
+```

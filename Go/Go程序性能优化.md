@@ -101,6 +101,14 @@
 
 
 
+# Benchmark
+
+```go
+go test -run=^$ -bench=BenchmarkNewMessage -count=5 -benchmem
+```
+
+
+
 
 
 #### 参考

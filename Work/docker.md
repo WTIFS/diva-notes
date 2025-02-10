@@ -13,7 +13,7 @@ docker run -it --name golang -v /Users/chris/Projects/go/src:/workspace -v /User
 
 docker run -it --name golang1.17-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.17 /bin/bash
 
-docker run -it --name golang1.21-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.21 /bin/bash
+docker run -it --name golang1.23-amd64 -v /Users/chris/Projects:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.23.1 /bin/bash
 
 docker run -it --name gcc -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root gcc /bin/bash
 
@@ -62,9 +62,9 @@ docker restart {containerID}
 ##### 启动北极星
 ```bash
 docker run -d --name polaris-server -p 8190:8090 -p 8191:8091 polarismesh/polaris-server
-docker run -d --name polaris-console --net=host polarismesh/polaris-console
+docker run -d --name polaris-console -p 8080:8080 polarismesh/polaris-console
 
-docker run -d --name polaris-standalone --net=host polarismesh/polaris-standalone:latest
+docker run -d --name polaris-standalone -p 8090:8090 -p 8091:8091 -p 8080:8080 polarismesh/polaris-standalone:latest
 ```
 
 ##### 启动 jaeger
@@ -90,11 +90,83 @@ docker-compose up
 docker run -d --name mongo -p 27017:27017 mongo
 ```
 
+rabbitmq
+
+```go
+docker run -d --hostname my-rabbit --name rabbitmq -p 8480:8080 -p 5672:5672 -p 15672:15672 rabbitmq
+```
 
 
-编译
+
+
+
+##### 编译
 
 ```
-docker build -t harbor-v2.mobvista.com/dsp/mongo_checker:t0.0.7 -f docker/Dockerfile .
+docker build -t harbor.xxx.com/dsp/xxx:v0.0.7 -f docker/Dockerfile .
+```
+
+
+
+
+
+## 分析Docker使用了多少空间
+
+```sh
+docker system df
+
+TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+Images          61        16        21.1GB    15.25GB (72%)
+Containers      69        0         12.26MB   12.26MB (100%)
+Local Volumes   3         2         539.1MB   50.04MB (9%)
+Build Cache     76        0         1.242GB   1.242GB
+```
+
+
+
+要尽可能地清理，不包括正在使用的组件，请运行这个命令：
+
+```sh
+# 全部清理
+docker system prune -a
+
+# 清理不用的磁盘
+docker volume prune -a
+```
+
+
+
+**查询僵尸文件**
+
+在 Docker 1.9 以上的版本中，官方提供用于查询僵尸文件的命令：
+
+```
+docker volume ls -qf dangling=true
+
+# 删除所有dangling数据卷（即无用的Volume，僵尸文件）
+docker volume rm $(docker volume ls -qf dangling=true)
+```
+
+
+
+##### 镜像列表
+
+```
+{
+    "registry-mirrors": [
+        "https://dockerhub.icu",
+        "https://docker.chenby.cn",
+        "https://docker.1panel.live",
+        "https://docker.awsl9527.cn",
+        "https://docker.anyhub.us.kg",
+        "https://dhub.kubesre.xyz",
+        "https://do.nark.eu.org",
+        "https://dc.j8.work",
+        "https://docker.m.daocloud.io",
+        "https://dockerproxy.com",
+        "https://docker.mirrors.ustc.edu.cn",
+        "https://docker.nju.edu.cn"
+    ]
+}
 ```
 

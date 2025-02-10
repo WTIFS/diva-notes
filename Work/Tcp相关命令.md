@@ -46,7 +46,7 @@ sudo tcpdump -i eth0 -tnn -c 10000 | awk -F "." '{print $1"."$2"."$3"."$4}' | so
 ##### 检视 header
 
 ```bash
-tcpdump -A -c 10 -s 10240 'tcp port 13066 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)' | egrep --line-buffered "^........(GET |HTTP\/|POST |HEAD )|^[A-Za-z0-9-]+: " | sed -r 's/^........(GET |HTTP\/|POST |HEAD )/\n\1/g'
+tcpdump -A -c 10 -s 10240 'tcp port 10001 and (((ip[2:2] - ((ip[0]&0xf)<<2)) - ((tcp[12]&0xf0)>>2)) != 0)' | egrep --line-buffered "^........(GET |HTTP\/|POST |HEAD )|^[A-Za-z0-9-]+: " | sed -r 's/^........(GET |HTTP\/|POST |HEAD )/\n\1/g'
 
 tcpdump -i any -s 0 -A -c 1 'tcp port 13066' | grep -E '^(x-cpu.*):'
 ```
@@ -69,8 +69,18 @@ netstat -an | awk '/^tcp/ {++S[$NF]} END {for(a in S) print a, S[a]}'
 
 netstat -nat | grep -i "established" | wc -l
 ss -t state established | wc -l
+```
+
+
+
+##### 检查网卡流量
 
 ```
+yum install nethogs
+nethogs eth0
+```
+
+
 
 
 
