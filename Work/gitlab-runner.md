@@ -29,13 +29,13 @@ sudo gitlab-runner register
 
 # 切换用户
 
-默认使用 gitlab-runner 用户启动，可能会碰到缺少读写权限问题，可以设置使用别的用户。以 xxx 为例
+默认使用 gitlab-runner 用户启动，可能会碰到缺少读写权限问题，可以设置使用别的用户。以 gitlab-runner 用户为例
 
 ```bash
 sudo su
 gitlab-runner stop
 gitlab-runner uninstall
-gitlab-runner install --working-directory /home/xxx  --user xxx
+gitlab-runner install --working-directory /home/gitlab-runner  --user gitlab-runner
 gitlab-runner start
 ps aux | grep gitlab-runner
 ```

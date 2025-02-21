@@ -21,8 +21,8 @@ sh start.sh
 # grafana 账密: admin/admin
 yum install docker
 systemctl start docker
-docker run -d -p 3000:3000 --name=grafana grafana/grafana
-# grafana 设置数据源 http://host.docker.internal:9090
+docker run -d -p 3000:3000 --net=host --name=grafana grafana/grafana
+# grafana 设置数据源 http://localhost:9090
 ```
 
 
