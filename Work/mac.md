@@ -7,6 +7,14 @@ killall Dock
 
 
 
+##### 外置耳机没声
+
+```bash
+sudo killall coreaudiod
+```
+
+
+
 ##### 三指拖移功能
 
 可用三指调整表格宽度

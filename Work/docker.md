@@ -13,7 +13,9 @@ docker run -it --name golang -v /Users/chris/Projects/go/src:/workspace -v /User
 
 docker run -it --name golang1.17-amd64 -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.17 /bin/bash
 
-docker run -it --name golang1.23-amd64 -v /Users/chris/Projects:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.23.1 /bin/bash
+docker run -it --name golang1.24-amd64 -v /Users/chris/Projects:/workspace -v /Users/chris:/root -v /usr/local/include:/usr/local/include --platform linux/amd64 golang:1.24.1 /bin/bash
+
+docker run -it --name golang1.24 golang:1.24.1 /bin/bash
 
 docker run -it --name gcc -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root gcc /bin/bash
 
