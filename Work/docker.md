@@ -19,6 +19,7 @@ docker run -it --name golang1.24 golang:1.24.1 /bin/bash
 
 docker run -it --name gcc -v /Users/chris/Projects/go/src:/workspace -v /Users/chris:/root gcc /bin/bash
 
+
 export GOPRIVATE="gitlab.xxx.com"
 ```
 
@@ -92,10 +93,16 @@ docker-compose up
 docker run -d --name mongo -p 27017:27017 mongo
 ```
 
-rabbitmq
+**rabbitmq**
 
 ```go
 docker run -d --hostname my-rabbit --name rabbitmq -p 8480:8080 -p 5672:5672 -p 15672:15672 rabbitmq
+```
+
+**kafka**
+
+```bash
+docker run -d --name kafka4.0 --net=host apache/kafka:4.0.0
 ```
 
 
@@ -114,7 +121,7 @@ docker build -t harbor.xxx.com/dsp/xxx:v0.0.7 -f docker/Dockerfile .
 
 ## 分析Docker使用了多少空间
 
-```sh
+```bash
 docker system df
 
 TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
@@ -130,7 +137,7 @@ Build Cache     76        0         1.242GB   1.242GB
 
 ```sh
 # 全部清理
-docker system prune -a
+docker system prune -a -f
 
 # 清理不用的磁盘
 docker volume prune -a
