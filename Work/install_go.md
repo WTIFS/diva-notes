@@ -1,3 +1,10 @@
+```bash
+vim install_go.sh
+```
+
+
+
+```bash
 #!/bin/bash
 
 # 检查参数
@@ -49,3 +56,12 @@ echo ""
 echo "或者创建符号链接:"
 echo "sudo ln -sf ${INSTALL_DIR}/bin/go /usr/local/bin/go"
 echo "sudo ln -sf ${INSTALL_DIR}/bin/gofmt /usr/local/bin/gofmt"
+```
+
+
+
+```bash
+chmod +x ./install_go.sh
+./install_go.sh 1.25.1
+```
+
