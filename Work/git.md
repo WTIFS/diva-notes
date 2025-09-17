@@ -53,6 +53,8 @@ git config --global --get user.email
 
 // 或者执行
 git config --global url."git@gitlab.xxx.com:".insteadOf http://gitlab.xxx.com/
+
+git config --global url."ssh://git@gitlab.mobvista.com/:".insteadOf https://gitlab.mobvista.com/
 ```
 
 
@@ -160,7 +162,8 @@ make install
 vim /etc/profile.d/sh.local
 
 #在底部加上git相关配置
-export PATH=/data/lib/git2.17.1:$PATH
+export GITROOT="/data/lib/git2.17.1"
+export PATH=$GITROOT:$PATH
 ```
 
 

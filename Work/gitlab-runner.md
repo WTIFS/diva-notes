@@ -7,7 +7,12 @@
 1. 添加源（CentOS）
 
 ```bash
+# 这个脚本自动识别系统并下载安装包，对于不支持的系统会报错
 curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh" | sudo bash
+
+# 这个脚本直接 下载 CentOS 的安装包
+sudo curl -L "https://packages.gitlab.com/runner/gitlab-runner/packages/el/7/gitlab-runner-15.11.0-1.x86_64.rpm/download.rpm" -o gitlab-runner.rpm
+sudo yum localinstall gitlab-runner.rpm
 ```
 
 2. 安装
@@ -21,6 +26,7 @@ sudo yum install gitlab-runner
 
 ```bash
 sudo gitlab-runner register
+executor 选 shell 就行
 ```
 
 之后输入 gitlab 地址和 token 等，从 gitlab 仓库 - Settings - Runners 里找
@@ -71,4 +77,6 @@ test-job:
   script:
     - make test
 ```
+
+
 

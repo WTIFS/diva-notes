@@ -102,7 +102,9 @@ docker run -d --hostname my-rabbit --name rabbitmq -p 8480:8080 -p 5672:5672 -p 
 **kafka**
 
 ```bash
-docker run -d --name kafka4.0 --net=host apache/kafka:4.0.0
+docker run -d --name kafka4.0 -p 9092:9092 apache/kafka:4.0.0
+
+docker run --name kafka4.0 -p 9092:9092 apache/kafka:4.0.0
 ```
 
 
