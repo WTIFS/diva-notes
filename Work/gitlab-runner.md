@@ -10,7 +10,7 @@
 # 这个脚本自动识别系统并下载安装包，对于不支持的系统会报错
 curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.rpm.sh" | sudo bash
 
-# 这个脚本直接 下载 CentOS 的安装包
+# 这个脚本直接 下载 CentOS x64 的安装包
 sudo curl -L "https://packages.gitlab.com/runner/gitlab-runner/packages/el/7/gitlab-runner-15.11.0-1.x86_64.rpm/download.rpm" -o gitlab-runner.rpm
 sudo yum localinstall gitlab-runner.rpm
 ```
@@ -38,7 +38,7 @@ executor 选 shell 就行
 默认使用 gitlab-runner 用户启动，可能会碰到缺少读写权限问题，可以设置使用别的用户。以 gitlab-runner 用户为例
 
 ```bash
-sudo su
+sudo su -
 gitlab-runner stop
 gitlab-runner uninstall
 gitlab-runner install --working-directory /home/gitlab-runner  --user gitlab-runner

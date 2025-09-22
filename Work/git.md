@@ -53,8 +53,6 @@ git config --global --get user.email
 
 // 或者执行
 git config --global url."git@gitlab.xxx.com:".insteadOf http://gitlab.xxx.com/
-
-git config --global url."ssh://git@gitlab.mobvista.com/:".insteadOf https://gitlab.mobvista.com/
 ```
 
 
@@ -66,21 +64,6 @@ git config --global --add push.default current
 ```
 
 
-
-##### CentOS 升级 git 版本
-
-```
-yum -y install curl-devel
-
-wget https://www.kernel.org/pub/software/scm/git/git-2.32.0.tar.gz
-
-tar -zxvf git-2.9.5.tar.gz
-
-cd git-2.32.0
-./configure –prefix=/usr/local/git
-
-make && make install
-```
 
 
 
@@ -123,7 +106,31 @@ git config --global credential.helper 'cache –timeout=3600' #保存一小时
 
 
 
-##### centOS升级git版本
+##### CentOS 升级 git 版本
+
+简短版：
+
+```shell
+yum -y install curl-devel
+
+wget https://www.kernel.org/pub/software/scm/git/git-2.32.0.tar.gz
+
+tar -zxvf git-2.32.0.tar.gz
+
+cd git-2.32.0
+./configure -prefix=/usr/local/git
+
+make && make install
+
+## 检查(有输出证明好了)
+./git --version
+
+sudo ln -sf /data/lib/git-2.32.0/bin/git /usr/local/bin/git
+```
+
+
+
+详细版：
 
 ```go
 1. 卸载旧版git
