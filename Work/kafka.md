@@ -45,10 +45,19 @@ Format Log Directories
 bin/kafka-storage.sh format --standalone -t $KAFKA_CLUSTER_ID -c config/server.properties
 ```
 
-修改返回给客户端的地址（客户端和kafka-server不在一起时必须设置；设置这个后 `/bin/kafka-console-consumer.sh` 将无法通过 localhost:9092 进行消费）
+修改返回给客户端的地址（客户端和kafka-server不在一起时必须设置）
 
 ```bash
-advertised.listeners=PLAINTEXT://xxx:9092
+vim config/server.properties
+
+listeners=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,INTERNAL://localhost:9094
+
+advertised.listeners=PLAINTEXT://xxx.xxx.xx.xx:9092,INTERNAL://localhost:9094
+  listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT,SSL:SSL,SASL_PLAINTEXT:SASL_PLAINTEXT,SASL_SSL:SASL_SSL
+  
+# 修改后重启 kafka
+# 本地通过 localhost:9094 访问
+# 外部通过 xxx.xxx.xx.xx:9092 访问
 ```
 
 
