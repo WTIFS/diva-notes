@@ -70,6 +70,16 @@ bin/kafka-server-start.sh config/server.properties
 
 
 
+#### 检查消费情况
+
+```bash
+bin/kafka-consumer-groups.sh --bootstrap-server localhost:9094 --describe --group test
+```
+
+
+
+
+
 # 参考
 
 https://kafka.apache.org/quickstart

@@ -48,6 +48,24 @@ ps aux | grep gitlab-runner
 
 
 
+#### 增加docker执行权限
+
+```bash
+usermod -aG docker gitlab-runner
+```
+
+
+
+#### gitlab-runner 配置保存位置
+
+```
+/etc/gitlab-runner/config.toml
+```
+
+
+
+
+
 # 配置示例
 
 ```yaml
